@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>主页</title>
+</head>
+<body>
+
+<div id="pwd" style="width: 600px;margin: auto;"></div>
+<div style="width:600px; border:1px dotted;text-align: center; margin:auto; padding:20px 0px;" >
+    <div style="width:300px; text-align: left; margin: auto;">选择文件上传：</div>
+    <br/>
+    <form id="uploadfile" action="/upload"  method="post" enctype="multipart/form-data" style="text-align: center;">
+        <input type="file" id="upload" name="upload" style = "border:1px solid;" />
+        <input type="submit" value="上传"/>
+    </form>
+</div>
+
+<table border="1px" style="width: 600px;text-align: center; margin: auto; table-layout: fixed;">
+    <thead>
+    <tr>
+        <th>文件名</th>
+        <th>状态</th>
+        <th>操作</th>
+    </tr>
+    </thead>
+    <tbody id="dynamic_body">
+
+    </tbody>
+</table>
+</body>
+</html>
+<script>
+    function append(file_name, file_state, file_ops) {
+        var dynamic_body = document.getElementById("dynamic_body");
+        var new_row = document.createElement("tr");
+        var name_cell = document.createElement("td");
+        name_cell.textContent = file_name;
+        var state_cell = document.createElement("td");
+        state_cell.textContent = file_state;
+        var op_cell = document.createElement("td");
+        for (var key in file_ops) {
+            var link = document.createElement("a");
+            link.style.marginRight = '20px';
+            link.textContent = key;
+            link.href = file_ops[key];
+            op_cell.appendChild(link);
+        }
+        new_row.appendChild(name_cell);
+        new_row.appendChild(state_cell);
+        new_row.appendChild(op_cell);
+        dynamic_body.appendChild(new_row);
+    }
+</script>
