@@ -7,11 +7,12 @@
 <body>
 
 <div id="pwd" style="width: 600px;margin: auto;"></div>
-<div style="width:600px; border:1px dotted;text-align: center; margin:auto; padding:20px 0px;" >
+<a id="back"></a>
+<div style="width:600px; border:1px dotted;text-align: center; margin:auto; padding:20px 0px;">
     <div style="width:300px; text-align: left; margin: auto;">选择文件上传：</div>
     <br/>
-    <form id="uploadfile" action="/upload"  method="post" enctype="multipart/form-data" style="text-align: center;">
-        <input type="file" id="upload" name="upload" style = "border:1px solid;" />
+    <form id="uploadfile" action="/upload" method="post" enctype="multipart/form-data" style="text-align: center;">
+        <input type="file" id="upload" name="upload" style="border:1px solid;"/>
         <input type="submit" value="上传"/>
     </form>
 </div>
@@ -51,4 +52,12 @@
         new_row.appendChild(op_cell);
         dynamic_body.appendChild(new_row);
     }
+
+    function show_back_option(href) {
+        var back = document.getElementById("back");
+        back.textContent = "后退";
+        back.href = href;
+    }
+
+    window.history.replaceState(null, null, "http://localhost:7777/disk.html");  // 设置浏览器执行完操作以后，地址栏为disk.html,这样子就可以刷新了。
 </script>

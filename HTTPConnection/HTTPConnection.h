@@ -99,6 +99,7 @@ private:
     std::string delete_file_name_;  // 删除文件的名字，回溯的时候需要clear()。
     std::string share_file_name_;  // 分享或者取消分享的时候使用的文件名，回溯的时候需要clear()。
     std::string entry_dir_name_;  // 进入的文件夹的名字，回溯的时候需要clear()。
+    std::string copy_file_name;  // 需要拷贝的文件名字，回溯的时候需要clear()。
 
 public:
     enum WORK_MODE {  // 当前对象接下来应该做什么工作，是读，处理逻辑还是写

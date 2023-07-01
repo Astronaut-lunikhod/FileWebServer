@@ -174,7 +174,7 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisBody(std::string line) {
 HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
     int len = strlen(response_file_path_);
     RESPONSE_CODE ret = RESPONSE_CODE::NOT_FOUND;
-    const char *p = strrchr(url_, '/');  // 查询url地址最右边的/，目的是为了分离出最后一级的内容。
+    const char *p = strchr(url_, '/');  // 查询url地址最右边的/，目的是为了找出请求目标
     std::string htmls[]{"/register.html", "/register_error.html", "/login.html", "/login_error.html"};
     for (int i = 0; i < 4; ++i) {  // 遍历看看是不是不需要权限就可以访问的基础页面。
         if (strcmp(p, htmls[i].c_str()) == 0) {  // 确实在基础页面之内。
@@ -184,7 +184,8 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
         }
     }
     std::string request = "/login";
-    if (strcmp(p, request.c_str()) == 0 && method_ == POST) {  // 如果是/login请求，切割原始的body_，找出账号密码。
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0 &&
+        method_ == POST) {  // 如果是/login请求，切割原始的body_，找出账号密码。
         char *tmp = new char[body_length_ + 1]{'\0'};
         strcpy(tmp, body_);
         char *split = strchr(tmp, '&');
@@ -209,7 +210,8 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
         }
     }
     request = "/register";
-    if (strcmp(p, request.c_str()) == 0 && method_ == POST) {  // 如果是/register请求，切割原始的body_，找出账号密码。
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0 &&
+        method_ == POST) {  // 如果是/register请求，切割原始的body_，找出账号密码。
         char *tmp = new char[body_length_ + 1]{'\0'};
         strcpy(tmp, body_);
         char *split = strchr(tmp, '&');
@@ -221,7 +223,8 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
         password = password.substr(found + 1);
         if (MysqlConnectionPool::get_mysql_connection_pool_singleton_instance_()->Register(username, password)) {
             assert(mkdir((Config::get_singleton_()->http_connection_file_dir_root_path_ + "/" + username).c_str(),
-                         S_IRWXU) == 0);  // 创建目标用户的文件夹。
+                         S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH |
+                         S_IWOTH | S_IXOTH) == 0);  // 创建目标用户的文件夹。
             strncpy(response_file_path_ + len, "/login.html\0", strlen("/login.html\0"));
         } else {
             strncpy(response_file_path_ + len, "/register_error.html\0", strlen("/register_error.html\0"));
@@ -229,7 +232,7 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
         ret = RESPONSE_CODE::OK;
     }
     request = "/disk.html";  // 直接访问disk.html，而不是我response返回的。
-    if (strcmp(p, request.c_str()) == 0) {  // 如果是/disk.html，判断是否已经登录了。。
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/disk.html，判断是否已经登录了。。
         if (login_state_) {  // 登录了就可以。
             strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));
             ret = RESPONSE_CODE::DISK_HTML;
@@ -239,8 +242,9 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
         }
     }
     request = "/upload";  // 上传文件
-    if (strcmp(p, request.c_str()) == 0) {  // 如果是/upload请求，判断是否已经登录了。。
-        if (login_state_) {  // 登录了就可以。
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/upload请求，判断是否已经登录了。。
+        if (login_state_ &&
+            (Utils::InDir(user_file_root_path_, pwd_) || user_file_root_path_ == pwd_)) {  // 登录,并且当前的位置处于目标自己的根目录之下。
             strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));
             // 将body保存文件
             std::ofstream fout(pwd_ + "/" + upload_file_name_, std::ios::out);
@@ -257,10 +261,75 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
     }
     request = "/download";
     if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download请求，判断是否已经登录了。
-        if (login_state_) {  // 登录了就可以。
+        if (login_state_ &&
+            (Utils::InDir(user_file_root_path_, pwd_) || user_file_root_path_ == pwd_)) {  // 登录,并且当前的位置处于目标自己的根目录之下。
             const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
             download_file_name_ = pos + 1;
-            return RESPONSE_CODE::DOWNLOAD;  // 不再加载，因为在构造响应体的时候会加载文件。
+            if (download_file_name_.find_first_of('/') != std::string::npos ||
+                download_file_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                ret = RESPONSE_CODE::FORBIDDEN;
+            } else {
+                return RESPONSE_CODE::DOWNLOAD;  // 不再加载，因为在构造响应体的时候会加载文件。
+            }
+        } else {  // 没有权限访问。
+            strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+            ret = RESPONSE_CODE::FORBIDDEN;
+        }
+    }
+    request = "/download2copy";
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download2copy请求，判断是否已经登录了,将已经分享的文件下载到本地。
+        if (login_state_ &&
+            (Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_, pwd_) ||
+             Config::get_singleton_()->http_connection_file_dir_root_path_ == pwd_)) {  // 登录,当前位置必须要终极根目录下。
+            const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
+            download_file_name_ = pos + 1;
+            if (download_file_name_.find_first_of('/') != std::string::npos ||
+                download_file_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                ret = RESPONSE_CODE::FORBIDDEN;
+            } else {
+                // 判断目标文件是否可以下载
+                std::string final_path = pwd_ + "/" + download_file_name_;
+                struct stat file_stat;
+                assert(stat(final_path.c_str(), &file_stat) != -1);  // 取出权限。
+                if (!((file_stat.st_mode & (0777)) & S_IXOTH)) {  // 其他人不可执行，代表不是可分享的文件，无法下载。
+                    strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                    ret = RESPONSE_CODE::FORBIDDEN;
+                } else {
+                    return RESPONSE_CODE::DOWNLOAD;  // 不再加载，因为在构造响应体的时候会加载文件。
+                }
+            }
+        } else {  // 没有权限访问。
+            strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+            ret = RESPONSE_CODE::FORBIDDEN;
+        }
+    }
+    request = "/copy";
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download2copy请求，判断是否已经登录了,将已经分享的文件下载到本地。
+        if (login_state_ &&
+            (Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_, pwd_) ||
+             Config::get_singleton_()->http_connection_file_dir_root_path_ == pwd_)) {  // 登录,当前位置必须要终极根目录下。
+            const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
+            copy_file_name = pos + 1;
+            if (copy_file_name.find_first_of('/') != std::string::npos ||
+                copy_file_name.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                ret = RESPONSE_CODE::FORBIDDEN;
+            } else {
+                // 判断目标文件是否可以下载
+                std::string final_path = pwd_ + "/" + copy_file_name;
+                struct stat file_stat;
+                assert(stat(final_path.c_str(), &file_stat) != -1);  // 取出权限。
+                if (!((file_stat.st_mode & (0777)) & S_IXOTH)) {  // 其他人不可执行，代表不是可分享的文件，无法下载。
+                    strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                    ret = RESPONSE_CODE::FORBIDDEN;
+                } else {
+                    strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
+                    Utils::CopyFile(final_path, user_file_root_path_);
+                    ret = RESPONSE_CODE::DISK_HTML;
+                }
+            }
         } else {  // 没有权限访问。
             strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
             ret = RESPONSE_CODE::FORBIDDEN;
@@ -268,12 +337,19 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
     }
     request = "/delete";
     if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download请求，判断是否已经登录了。
-        if (login_state_) {  // 登录了就可以。
+        if (login_state_ &&
+            (Utils::InDir(user_file_root_path_, pwd_) || user_file_root_path_ == pwd_)) {  // 登录,并且当前的位置处于目标自己的根目录之下。
             strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
             const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
             delete_file_name_ = pos + 1;
-            remove((pwd_ + "/" + delete_file_name_).c_str());  // 删除对应的文件以后，再次走Disk.html的流程。
-            ret = RESPONSE_CODE::DISK_HTML;
+            if (delete_file_name_.find_first_of('/') != std::string::npos ||
+                delete_file_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                ret = RESPONSE_CODE::FORBIDDEN;
+            } else {
+                remove((pwd_ + "/" + delete_file_name_).c_str());  // 删除对应的文件以后，再次走Disk.html的流程。
+                ret = RESPONSE_CODE::DISK_HTML;
+            }
         } else {  // 没有权限访问。
             strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
             ret = RESPONSE_CODE::FORBIDDEN;
@@ -281,25 +357,38 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
     }
     request = "/deleteDir";
     if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download请求，判断是否已经登录了。
-        if (login_state_) {  // 登录了就可以。
+        if (login_state_ &&
+            (Utils::InDir(user_file_root_path_, pwd_) || user_file_root_path_ == pwd_)) {  // 登录,并且当前的位置处于目标自己的根目录之下。
             strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
             const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
             delete_file_name_ = pos + 1;
-            Utils::DeleteDir(pwd_ + "/" + delete_file_name_);  // 删除对应的文件以后，再次走Disk.html的流程。
-            ret = RESPONSE_CODE::DISK_HTML;
+            if (delete_file_name_.find_first_of('/') != std::string::npos ||
+                delete_file_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                ret = RESPONSE_CODE::FORBIDDEN;
+            } else {
+                Utils::DeleteDir(pwd_ + "/" + delete_file_name_);  // 删除对应的文件以后，再次走Disk.html的流程。
+                ret = RESPONSE_CODE::DISK_HTML;
+            }
         } else {  // 没有权限访问。
             strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
             ret = RESPONSE_CODE::FORBIDDEN;
         }
     }
-    request = "/entry";
+    request = "/enter";
     if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download请求，判断是否已经登录了。
         if (login_state_) {  // 登录了就可以。
             strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
             const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
             entry_dir_name_ = pos + 1;
-            pwd_ = pwd_ + "/" + entry_dir_name_;
-            ret = RESPONSE_CODE::DISK_HTML;
+            if (entry_dir_name_.find_first_of('/') != std::string::npos ||
+                entry_dir_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                ret = RESPONSE_CODE::FORBIDDEN;
+            } else {
+                pwd_ = pwd_ + "/" + entry_dir_name_;
+                ret = RESPONSE_CODE::DISK_HTML;
+            }
         } else {  // 没有权限访问。
             strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
             ret = RESPONSE_CODE::FORBIDDEN;
@@ -307,27 +396,53 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
     }
     request = "/share";
     if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/share请求，判断是否已经登录了。
-        if (login_state_) {  // 登录了就可以。
+        if (login_state_ &&
+            (Utils::InDir(user_file_root_path_, pwd_) || user_file_root_path_ == pwd_)) {  // 登录,并且当前的位置处于目标自己的根目录之下。
             strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
             const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
             share_file_name_ = pos + 1;
-            chmod((pwd_ + "/" + share_file_name_).c_str(),
-                  S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH |
-                  S_IWOTH | S_IXOTH);  // 将分享文件的操作放在这里,也就是新增S_IXOTH。
-            ret = RESPONSE_CODE::DISK_HTML;
+            if (share_file_name_.find_first_of('/') != std::string::npos ||
+                share_file_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                ret = RESPONSE_CODE::FORBIDDEN;
+            } else {
+                chmod((pwd_ + "/" + share_file_name_).c_str(),
+                      S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH |
+                      S_IWOTH | S_IXOTH);  // 将分享文件的操作放在这里,也就是新增S_IXOTH。
+                ret = RESPONSE_CODE::DISK_HTML;
+            }
         } else {  // 没有权限访问。
             strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
             ret = RESPONSE_CODE::FORBIDDEN;
         }
     }
     request = "/unshare";
-    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/share请求，判断是否已经登录了。
-        if (login_state_) {  // 登录了就可以。
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/unshare请求，判断是否已经登录了。
+        if (login_state_ &&
+            (Utils::InDir(user_file_root_path_, pwd_) || user_file_root_path_ == pwd_)) {  // 登录,并且当前的位置处于目标自己的根目录之下。
             strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
             const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
             share_file_name_ = pos + 1;
-            chmod((pwd_ + "/" + share_file_name_).c_str(),
-                  S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH);  // 将取消分享文件的操作放在这里,也就是删除S_IXOTH。
+            if (share_file_name_.find_first_of('/') != std::string::npos ||
+                share_file_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                ret = RESPONSE_CODE::FORBIDDEN;
+            } else {
+                chmod((pwd_ + "/" + share_file_name_).c_str(),
+                      S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP |
+                      S_IROTH);  // 将取消分享文件的操作放在这里,也就是删除S_IXOTH。
+                ret = RESPONSE_CODE::DISK_HTML;
+            }
+        } else {  // 没有权限访问。
+            strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+            ret = RESPONSE_CODE::FORBIDDEN;
+        }
+    }
+    request = "/back";
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/back请求，判断是否已经登录了。
+        if (login_state_ && Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_, pwd_)) {  // 登录,并且当前的位置处于文件系统的根目录之下。
+            strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
+            pwd_ = pwd_.substr(0, pwd_.find_last_of("/"));  // 修改当前位置，删除最后一个/之后的所有内容
             ret = RESPONSE_CODE::DISK_HTML;
         } else {  // 没有权限访问。
             strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
@@ -357,25 +472,50 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
             std::vector<std::string> names;
             std::vector<bool> shares;
             std::vector<bool> is_dirs;
-            Utils::IteratorDir(pwd_, names, is_dirs, shares);
+            Utils::IteratorDir(pwd_, names, is_dirs, shares, user_file_root_path_, pwd_);
             for (int i = 0; i < names.size(); ++i) {
-                if(is_dirs[i]) {
-                    std::string del_href = "'deleteDir?file_name=" + names[i] + "',",
-                            download_href = "'enter?file_name=" + names[i] + "'";
-                    js_code = js_code + "append('" + names[i] + "', '" +
-                              (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
-                              "'删除':" + del_href + "'进入':" + download_href + "});";
+                if (pwd_ == user_file_root_path_ || Utils::InDir(user_file_root_path_, pwd_)) {  // 如果当前在用户的根目录或者就是根目录
+                    if (is_dirs[i]) {
+                        std::string del_href = "'deleteDir?file_name=" + names[i] + "',",
+                                enter_href = "'enter?file_name=" + names[i] + "',",
+                                share_option = shares[i] ? "'取消分享':'unshare?file_name=" + names[i] + "'" :
+                                               "'分享':'share?file_name=" + names[i] + "'";
+                        js_code = js_code + "append('" + names[i] + "', '" +
+                                  (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
+                                  "'删除':" + del_href + "'进入':" + enter_href + share_option + "});";
+                    } else {
+                        std::string del_href = "'delete?file_name=" + names[i] + "',",
+                                download_href = "'download?file_name=" + names[i] + "',",
+                                share_option = shares[i] ? "'取消分享':'unshare?file_name=" + names[i] + "'" :
+                                               "'分享':'share?file_name=" + names[i] + "'";
+                        js_code = js_code + "append('" + names[i] + "', '" +
+                                  (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
+                                  "'删除':" + del_href + "'下载':" + download_href + share_option + "});";
+                    }
                 } else {
-                    std::string del_href = "'delete?file_name=" + names[i] + "',",
-                            download_href = "'download?file_name=" + names[i] + "',",
-                            share_option = shares[i] ? "'取消分享':'unshare?file_name=" + names[i] + "'" :
-                                           "'分享':'share?file_name=" + names[i] + "'";
-                    js_code = js_code + "append('" + names[i] + "', '" +
-                              (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
-                              "'删除':" + del_href + "'下载':" + download_href + share_option + "});";
+                    if (is_dirs[i]) {  // 仅显示文件夹名、状态、进入
+                        std::string enter_href = "'enter?file_name=" + names[i] + "'";
+                        js_code = js_code + "append('" + names[i] + "', '" +
+                                  (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
+                                  +"'进入':" + enter_href + "});";
+                    } else {  // 显示文件名、状态、下载、拷贝
+                        std::string download_href = "'download2copy?file_name=" + names[i] + "',",
+                                copy_href = "'copy?file_name=" + names[i] + "'";
+                        js_code = js_code + "append('" + names[i] + "', '" +
+                                  (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
+                                  "'下载':" + download_href + "'拷贝':" + copy_href + "});";
+                    }
                 }
             }
-            js_code = js_code + "document.getElementById(\"pwd\").textContent = \"当前位置:" + pwd_.substr(10) + "\"";
+            std::string show_position = pwd_.substr(10);
+            if (show_position.empty()) {  // 默认的根目录。
+                show_position = "/";
+            }
+            js_code = js_code + "document.getElementById(\"pwd\").textContent = \"当前位置:" + show_position + "\";";
+            if (Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_,
+                             pwd_)) {  // pwd一定在文件系统的根目录之下，不能突破出去。
+                js_code = js_code + "show_back_option('/back');";  // 只发送back，这样跳转到哪里，直接在构造请求体的逻辑之中修改pwd就行。
+            }
             js_code = js_code + "</script>";
             AddHeader(response_file_stat_.st_size + js_code.size(), "text/html;utf-8");
             iov_[0].iov_base = write_buffer_;
