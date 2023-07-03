@@ -101,6 +101,8 @@ private:
     std::string entry_dir_name_;  // 进入的文件夹的名字，回溯的时候需要clear()。
     std::string copy_file_name;  // 需要拷贝的文件名字，回溯的时候需要clear()。
 
+    bool start_boundary_;
+    int mines_count;
 public:
     enum WORK_MODE {  // 当前对象接下来应该做什么工作，是读，处理逻辑还是写
         READ = 0,

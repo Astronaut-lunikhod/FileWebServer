@@ -11,6 +11,13 @@
  * @return
  */
 HTTPConnection::SUB_MACHINE_STATE HTTPConnection::CutLine() {
+    if (read_next_idx_ < body_length_) {  // 说明字节数量严重不足，需要重新进行接收。
+        return SUB_MACHINE_STATE::CONTINUE_LINE;
+    }
+    if (blank_count_ == 2) {  // 如果是上传文件的时候，那么请求体是不需要将结尾的\r\n换乘结束符号的，后面可以自己计算。
+        sub_next_idx_ = read_next_idx_;
+        return SUB_MACHINE_STATE::GOOD_LINE;
+    }
     char tmp;
     for (; sub_next_idx_ < read_next_idx_; ++sub_next_idx_) {
         tmp = read_buffer_[sub_next_idx_];
@@ -65,7 +72,7 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisLine(std::string line) {
     }
     url_ = new char[found + 1]{'\0'};
     new_url_ = true;
-    strcpy(url_, line.substr(0, found).c_str());
+    strcpy(url_, Utils::UrlDecode(line.substr(0, found)).c_str());
     line = line.substr(found + 1);
 
     found = line.find_first_of(" \t");
@@ -89,6 +96,14 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisLine(std::string line) {
  * @return
  */
 HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisHead(std::string line) {
+    if (line.find(boundary_) != std::string::npos &&
+        !boundary_.empty()) {  // 如果上传文件的请求，这时代表已经进入了数据体的部分，需要开始计算有哪些部分是需要减去的。
+        start_boundary_ = true;
+    }
+    if (start_boundary_) {
+        mines_count += line.size() + 2;
+    }
+    std::cout << line << std::endl;
     if (line[0] == '\0') {
         blank_count_++;
         if (blank_count_ == 1 && boundary_.size() >= 2) {  // 说明这是上传文件的时候遇见的第一个空行，也就是头还没有解析结束。
@@ -147,12 +162,15 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisHead(std::string line) {
  * @return
  */
 HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisBody(std::string line) {
+    if (start_boundary_) {  // 同样，真实的数据的尾部还带有一些冗余的信息，需要删除。删完以后，关闭删除计数。等待Init回溯状态。
+        mines_count = mines_count + 2 + 2 + boundary_.size() + 2 + 2;
+        start_boundary_ = false;
+    }
     if (!boundary_.empty() && blank_count_ == 2) {  // 上传文件需要特殊处理,这个时候千万不能保存，因为要等到确认了身份权限才可以保存。
-        body_length_ = line.size();
-        line[body_length_] = '\0';
+        body_length_ = body_length_ - mines_count;  // 计算真正的数据体有多长。
         body_ = new char[body_length_ + 1]{'\0'};
         new_body_ = true;
-        strncpy(body_, line.c_str(), body_length_);
+        mempcpy(body_, read_buffer_ + main_next_idx_, body_length_);  // 复制数据体内容到body中，而且有终止符也不会停下来，一定复制n个元素。
         main_machine_state_ = MAIN_MACHINE_STATE::OVER;
         return REQUEST_CODE::GOOD_REQUEST;
     }
@@ -249,6 +267,7 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
             // 将body保存文件
             std::ofstream fout(pwd_ + "/" + upload_file_name_, std::ios::out);
             fout.write(body_, body_length_);
+            fout.flush();  // 刷新缓冲。
             fout.close();
             chmod((pwd_ + "/" + upload_file_name_).c_str(),
                   S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH |
@@ -440,7 +459,8 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
     }
     request = "/back";
     if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/back请求，判断是否已经登录了。
-        if (login_state_ && Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_, pwd_)) {  // 登录,并且当前的位置处于文件系统的根目录之下。
+        if (login_state_ && Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_,
+                                         pwd_)) {  // 登录,并且当前的位置处于文件系统的根目录之下。
             strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
             pwd_ = pwd_.substr(0, pwd_.find_last_of("/"));  // 修改当前位置，删除最后一个/之后的所有内容
             ret = RESPONSE_CODE::DISK_HTML;
@@ -534,16 +554,19 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
         case RESPONSE_CODE::DOWNLOAD: {
             const char *status_phrase{"OK\0"};
             AddLine(200, status_phrase);
-            AddResponse("Content-Disposition: attachment; filename=\"%s\"\r\n", download_file_name_.c_str());
+            AddResponse("Content-Disposition: attachment; filename=\"%s\"\r\n",
+                        Utils::UrlDecode(download_file_name_).c_str());
             stat((pwd_ + "/" + download_file_name_).c_str(), &response_file_stat_);  // 将需要下载的文件加载到内存中。
             int fd = open((pwd_ + "/" + download_file_name_).c_str(), O_RDONLY);
             map_response_file_address_ = (char *) mmap(0, response_file_stat_.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
             close(fd);
-            if (download_file_name_.find("jpg") != std::string::npos ||
-                download_file_name_.find("png") != std::string::npos) {
+            if (download_file_name_.find(".jpg") != std::string::npos ||
+                download_file_name_.find(".png") != std::string::npos) {
                 AddHeader(response_file_stat_.st_size, "image/jpeg");
-            } else if (download_file_name_.find("mp4") != std::string::npos) {
+            } else if (download_file_name_.find(".mp4") != std::string::npos) {
                 AddHeader(response_file_stat_.st_size, "video/mp4");
+            } else if (download_file_name_.find(".flv") != std::string::npos) {
+                AddHeader(response_file_stat_.st_size, "video/x-flv");
             } else {
                 AddHeader(response_file_stat_.st_size, "text/plain");
             }
@@ -745,6 +768,8 @@ void HTTPConnection::Establish(int client_fd, int epoll_fd, const sockaddr_in &c
     delete_file_name_ = "";
     share_file_name_ = "";
     entry_dir_name_ = "";
+    start_boundary_ = false;
+    mines_count = 0;
 }
 
 /**
@@ -790,6 +815,8 @@ void HTTPConnection::Init() {
     delete_file_name_.clear();
     share_file_name_.clear();
     entry_dir_name_.clear();
+    start_boundary_ = false;
+    mines_count = 0;
 }
 
 /**
@@ -808,7 +835,8 @@ bool HTTPConnection::ReceiveMessage() {
         read_next_idx_ = read_next_idx_ + byte;
     } else {
         while (true) {
-            int byte = recv(client_fd_, read_buffer_ + read_next_idx_, read_buffer_max_len_ - read_next_idx_, 0);
+            int byte = recv(client_fd_, read_buffer_ + read_next_idx_, read_buffer_max_len_ - read_next_idx_,
+                            0);  // 这里接收数据很搞，需要反复的回来接收，可以想办法更改一下。
             if (byte == 0) {
                 return false;
             }
@@ -860,6 +888,7 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisRequestMessage() {
     sub_machine_state_ = SUB_MACHINE_STATE::GOOD_LINE;
     REQUEST_CODE request_code = REQUEST_CODE::TEMP_GOOD_REQUEST;
     char *line;
+    std::string buffer;  // 用于将终止符也复制进去，可以使用memory代替。
     while (main_machine_state_ != MAIN_MACHINE_STATE::OVER) {  // 当主状态机已经Over那就正常退出循环，否则代表解析过程中存在问题。
         sub_machine_state_ = CutLine();
         if (sub_machine_state_ == SUB_MACHINE_STATE::BAD_LINE) {  // 截断都是失败的，那解析更不用说。
@@ -868,7 +897,6 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisRequestMessage() {
             return REQUEST_CODE::TEMP_GOOD_REQUEST;
         }
         line = read_buffer_ + main_next_idx_;  // 因为从状态机的标头移动的更快，所以根据快慢指针，可以取出其中的部分作为一行。所以下面的情况都是切割好的。开始进行解析。
-        main_next_idx_ = sub_next_idx_;
         switch (main_machine_state_) {  // 根据主状态机的状态进行不同情况的解析。
             case MAIN_MACHINE_STATE::LINE:
                 request_code = AnalysisLine(line);
@@ -883,9 +911,11 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisRequestMessage() {
                 }
                 break;
             case MAIN_MACHINE_STATE::BODY:
-                request_code = AnalysisBody(line);
+                buffer = std::string(line, sub_next_idx_ - main_next_idx_);
+                request_code = AnalysisBody(buffer);
                 return request_code;  // 不管是解析成功还是需要继续收包，都是直接返回。
         }
+        main_next_idx_ = sub_next_idx_;
     }
     return request_code;
 }

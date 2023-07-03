@@ -23,7 +23,7 @@ Config::Config() {  // 用于赋值各种参数，别的模块可以通过单例
     web_server_connection_one_shot_ = true;
     web_server_epoll_events_max_size_ = 1024;
     web_server_connection_max_num_ = 1024;
-    http_connection_read_buffer_max_len_ = 3140329;
+    http_connection_read_buffer_max_len_ = 41943040;
     http_connection_response_file_path_max_len_ = 256;
     http_connection_html_dir_path_ = "../HTMLDir";
     http_connection_write_buffer_max_len_ = 1024;

@@ -10,10 +10,13 @@
 #include <sys/epoll.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <iostream>
 #include <string>
 #include <cstring>
 #include <dirent.h>
 #include <vector>
+#include <sstream>
+#include <iomanip>
 #include <fstream>
 
 class WebServer;
@@ -234,6 +237,31 @@ public:
         target_file << source_file.rdbuf();
         source_file.close();
         target_file.close();
+    }
+
+    /**
+     * 对编码的url进行解码。
+     * @param encoded_url
+     * @return
+     */
+    static std::string UrlDecode(const std::string &encoded_url) {
+        std::istringstream input(encoded_url);
+        std::ostringstream output;
+
+        char c;
+        while(input.get(c)) {
+            if(c == '%') {
+                char hex[3] = {0};
+                if(input.get(hex, 3)) {
+                    int char_code;
+                    std::istringstream (hex) >> std::hex >> char_code;
+                    output << static_cast<char> (char_code);
+                }
+            } else {
+                output << c;
+            }
+        }
+        return output.str();
     }
 };
 
