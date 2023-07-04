@@ -27,20 +27,27 @@
         <th>文件名</th>
         <th>状态</th>
         <th>操作</th>
+        <th>预览</th>
     </tr>
     </thead>
     <tbody id="dynamic_body">
 
     </tbody>
 </table>
-<img src="/resource_image?file_name=1.jpg" width="100px" height="100px">
-<video controls>
-    <source src="/resource_image?file_name=movie.mp4" type="video/mp4">
-</video>
+<!--<img src="/resource_image?file_name=1.jpg" width="100px" height="100px">-->
+<!--<video controls>-->
+<!--    <source src="/resource_image?file_name=1.mp4">-->
+<!--</video>-->
+<!--<video controls>-->
+<!--    <source src="/resource_image?file_name=2.mp4">-->
+<!--</video>-->
+<!--<video controls>-->
+<!--    <source src="/resource_image?file_name=movie.mp4">-->
+<!--</video>-->
 </body>
 </html>
 <script>
-    function append(file_name, file_state, file_ops) {
+    function append(file_name, file_state, file_ops, img_name, video_name) {
         var dynamic_body = document.getElementById("dynamic_body");
         var new_row = document.createElement("tr");
         var name_cell = document.createElement("td");
@@ -55,9 +62,24 @@
             link.href = file_ops[key];
             op_cell.appendChild(link);
         }
+        var preview_cell = document.createElement("td");
+        if(img_name != "") {
+            var img = document.createElement("img");
+            img.src = "/preview?file_name=" + img_name;
+            img.width = 100;
+            img.height = 100;
+            preview_cell.appendChild(img);
+        } else if(video_name != "") {
+            var video_parent = document.createElement("video");
+            var source = document.createElement("source");
+            source.src = "/preview?file_name=" + video_name;
+            video_parent.appendChild(source);
+            preview_cell.appendChild(video_parent);
+        }
         new_row.appendChild(name_cell);
         new_row.appendChild(state_cell);
         new_row.appendChild(op_cell);
+        new_row.appendChild(preview_cell);
         dynamic_body.appendChild(new_row);
     }
 

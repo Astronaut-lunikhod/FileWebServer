@@ -536,9 +536,18 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
                                 download_href = "'download?file_name=" + names[i] + "',",
                                 share_option = shares[i] ? "'取消分享':'unshare?file_name=" + names[i] + "'" :
                                                "'分享':'share?file_name=" + names[i] + "'";
+                        std::string img_name = "", video_name = "";
+                        if (names[i].find_first_of(".mp4") != std::string::npos ||
+                            names[i].find_first_of(".flv") != std::string::npos) {
+                            video_name = names[i];
+                        } else if (names[i].find_first_of(".jpg") != std::string::npos ||
+                                   names[i].find_first_of(".png") != std::string::npos) {
+                            img_name = names[i];
+                        }
                         js_code = js_code + "append('" + names[i] + "', '" +
                                   (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
-                                  "'删除':" + del_href + "'下载':" + download_href + share_option + "});";
+                                  "'删除':" + del_href + "'下载':" + download_href + share_option + "},'" + img_name +
+                                  "','" + video_name + "');";
                     }
                 } else {
                     if (is_dirs[i]) {  // 仅显示文件夹名、状态、进入
@@ -549,9 +558,18 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
                     } else {  // 显示文件名、状态、下载、拷贝
                         std::string download_href = "'download2copy?file_name=" + names[i] + "',",
                                 copy_href = "'copy?file_name=" + names[i] + "'";
+                        std::string img_name = "", video_name = "";
+                        if (names[i].find_first_of(".mp4") != std::string::npos ||
+                            names[i].find_first_of(".flv") != std::string::npos) {
+                            video_name = names[i];
+                        } else if (names[i].find_first_of(".jpg") != std::string::npos ||
+                                   names[i].find_first_of(".png") != std::string::npos) {
+                            img_name = names[i];
+                        }
                         js_code = js_code + "append('" + names[i] + "', '" +
                                   (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
-                                  "'下载':" + download_href + "'拷贝':" + copy_href + "});";
+                                  "'下载':" + download_href + "'拷贝':" + copy_href + "},'" + img_name + "', '" +
+                                  video_name + "');";
                     }
                 }
             }
@@ -986,7 +1004,7 @@ bool HTTPConnection::WriteHTTPMessage() {
     while (true) {
         tmp = writev(client_fd_, iov_, iov_count_);
         if (tmp == -1) {
-            if(errno == EWOULDBLOCK || errno == EAGAIN) {
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
                 sleep(1);
                 continue;
             } else {
