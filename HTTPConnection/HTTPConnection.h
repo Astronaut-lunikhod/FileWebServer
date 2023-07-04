@@ -50,6 +50,7 @@ private:
         DISK_HTML = 0,  // 特殊情况，代表返回的DISK请求。
         DOWNLOAD = 1,  // 用户想要下载文件。
         DELETE = 2,  // 用户想要删除文件。
+        RESOURCE_HTML = 3,  // 网站的资源文件。
         OK = 200, // 一切OK，准备回送。
         BAD_RESPONSE = 400,  // 解析的过程中存在错误。
         FORBIDDEN = 403,  // 禁止访问。
@@ -99,8 +100,9 @@ private:
     std::string delete_file_name_;  // 删除文件的名字，回溯的时候需要clear()。
     std::string share_file_name_;  // 分享或者取消分享的时候使用的文件名，回溯的时候需要clear()。
     std::string entry_dir_name_;  // 进入的文件夹的名字，回溯的时候需要clear()。
-    std::string copy_file_name;  // 需要拷贝的文件名字，回溯的时候需要clear()。
-
+    std::string copy_file_name_;  // 需要拷贝的文件名字，回溯的时候需要clear()。
+    std::string mkdir_dir_name_;  // 创建的文件夹的名字。
+    std::string resource_file_name_;  // 网站需要的图片资源等文件的名字。
     bool start_boundary_;
     int mines_count;
 public:

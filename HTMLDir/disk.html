@@ -5,9 +5,13 @@
     <title>主页</title>
 </head>
 <body>
+<div style="display: flex;align-items: center;width: 1500px; margin: 10px auto;">
+    <a id="back" style="margin:0 0 0 450px;"></a>
+    <div id="pwd" style="margin:0 70px;"></div>
+    <form id="mkdir" action="/mkdir" method="get" style="margin: 0 60px;">
 
-<div id="pwd" style="width: 600px;margin: auto;"></div>
-<a id="back"></a>
+    </form>
+</div>
 <div style="width:600px; border:1px dotted;text-align: center; margin:auto; padding:20px 0px;">
     <div style="width:300px; text-align: left; margin: auto;">选择文件上传：</div>
     <br/>
@@ -29,6 +33,10 @@
 
     </tbody>
 </table>
+<img src="/resource_image?file_name=1.jpg" width="100px" height="100px">
+<video controls>
+    <source src="/resource_image?file_name=movie.mp4" type="video/mp4">
+</video>
 </body>
 </html>
 <script>
@@ -57,6 +65,17 @@
         var back = document.getElementById("back");
         back.textContent = "后退";
         back.href = href;
+
+        var mkdir_div = document.getElementById("mkdir");
+        var dir_name_input = document.createElement("input");
+        dir_name_input.name = "dir_name";
+        dir_name_input.type = "text";
+        dir_name_input.placeholder = "待创建文件夹名字";
+        var submit_input = document.createElement("input");
+        submit_input.type = "submit";
+        submit_input.value = "创建文件夹";
+        mkdir_div.appendChild(dir_name_input);
+        mkdir_div.appendChild(submit_input);
     }
 
     window.history.replaceState(null, null, "http://localhost:7777/disk.html");  // 设置浏览器执行完操作以后，地址栏为disk.html,这样子就可以刷新了。

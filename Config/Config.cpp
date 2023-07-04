@@ -26,7 +26,7 @@ Config::Config() {  // 用于赋值各种参数，别的模块可以通过单例
     http_connection_read_buffer_max_len_ = 41943040;
     http_connection_response_file_path_max_len_ = 256;
     http_connection_html_dir_path_ = "../HTMLDir";
-    http_connection_write_buffer_max_len_ = 1024;
+    http_connection_write_buffer_max_len_ = 41943040;
     mysql_host_ = "127.0.0.1";
     mysql_port_ = "3306";
     mysql_username_ = "root";
@@ -34,6 +34,7 @@ Config::Config() {  // 用于赋值各种参数，别的模块可以通过单例
     mysql_database_name_ = "FileWebServer";
     mysql_connection_max_num_ = 8;
     http_connection_file_dir_root_path_ = "../FileDir";
+    http_connection_resource_dir_root_path_ = "../ResourceDir";
 }
 
 Config::~Config() {

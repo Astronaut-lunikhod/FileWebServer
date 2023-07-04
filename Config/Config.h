@@ -52,5 +52,6 @@ public:
     unsigned mysql_connection_max_num_;  // 数据库连接的最大连接数。
 
     std::string http_connection_file_dir_root_path_;  // 网盘的根目录。
+    std::string http_connection_resource_dir_root_path_;  // 图片文件夹的根目录。
 };
 #endif

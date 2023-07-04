@@ -103,7 +103,6 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisHead(std::string line) {
     if (start_boundary_) {
         mines_count += line.size() + 2;
     }
-    std::cout << line << std::endl;
     if (line[0] == '\0') {
         blank_count_++;
         if (blank_count_ == 1 && boundary_.size() >= 2) {  // 说明这是上传文件的时候遇见的第一个空行，也就是头还没有解析结束。
@@ -330,14 +329,14 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
             (Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_, pwd_) ||
              Config::get_singleton_()->http_connection_file_dir_root_path_ == pwd_)) {  // 登录,当前位置必须要终极根目录下。
             const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
-            copy_file_name = pos + 1;
-            if (copy_file_name.find_first_of('/') != std::string::npos ||
-                copy_file_name.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+            copy_file_name_ = pos + 1;
+            if (copy_file_name_.find_first_of('/') != std::string::npos ||
+                copy_file_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
                 strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
                 ret = RESPONSE_CODE::FORBIDDEN;
             } else {
                 // 判断目标文件是否可以下载
-                std::string final_path = pwd_ + "/" + copy_file_name;
+                std::string final_path = pwd_ + "/" + copy_file_name_;
                 struct stat file_stat;
                 assert(stat(final_path.c_str(), &file_stat) != -1);  // 取出权限。
                 if (!((file_stat.st_mode & (0777)) & S_IXOTH)) {  // 其他人不可执行，代表不是可分享的文件，无法下载。
@@ -449,7 +448,7 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
             } else {
                 chmod((pwd_ + "/" + share_file_name_).c_str(),
                       S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP |
-                      S_IROTH);  // 将取消分享文件的操作放在这里,也就是删除S_IXOTH。
+                      S_IROTH | S_IWOTH);  // 将取消分享文件的操作放在这里,也就是删除S_IXOTH。
                 ret = RESPONSE_CODE::DISK_HTML;
             }
         } else {  // 没有权限访问。
@@ -468,6 +467,35 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
             strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
             ret = RESPONSE_CODE::FORBIDDEN;
         }
+    }
+    request = "/mkdir";
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/mkdir请求，判断是否已经登录了。
+        if (login_state_ && Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_,
+                                         pwd_)) {  // 登录,并且当前的位置处于文件系统的根目录之下。
+            strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
+            const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
+            mkdir_dir_name_ = pos + 1;
+            mkdir((pwd_ + "/" + mkdir_dir_name_).c_str(), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP |
+                                                          S_IROTH | S_IWOTH);  // 在当前目录下创建对应的文件夹,并且设定好对应的权限。
+            ret = RESPONSE_CODE::DISK_HTML;
+        } else {  // 没有权限访问。
+            strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+            ret = RESPONSE_CODE::FORBIDDEN;
+        }
+    }
+    request = "/resource_image";
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/resource_image，不需要登录，因为这是系统要用的资源文件。
+        size_t equal_position = strrchr(url_, '=') - url_;  // 找到等号的位置，操作的文件就在等号的右边。
+        size_t split_position = request.find_last_of('/');  // 找到分割符号的位置。
+        if (split_position != 0) {  // 说明想要分级，这有可能是人为的，不正确。
+            return RESPONSE_CODE::FORBIDDEN;
+        }
+        strncpy(response_file_path_, (Config::get_singleton_()->http_connection_resource_dir_root_path_ + "/").c_str(),
+                Config::get_singleton_()->http_connection_resource_dir_root_path_.size() + 1);
+        strncpy(response_file_path_ + strlen(response_file_path_), url_ + equal_position + 1,
+                strlen(url_ + equal_position + 1));
+        resource_file_name_ = url_ + equal_position + 1;
+        ret = RESPONSE_CODE::RESOURCE_HTML;
     }
     if (ret != RESPONSE_CODE::NOT_FOUND) {  // 找到了目标文件，开始加载到内存中。
         stat(response_file_path_, &response_file_stat_);
@@ -590,6 +618,29 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
             byte_to_send = write_buffer_next_idx_ + response_file_stat_.st_size;
             return true;
         }
+        case RESPONSE_CODE::RESOURCE_HTML: {
+            const char *status_phrase{"OK\0"};
+            AddLine(200, status_phrase);
+            AddResponse("Content-Disposition: inline; filename=\"%s\"\r\n",
+                        Utils::UrlDecode(resource_file_name_).c_str());
+            if (resource_file_name_.find(".jpg") != std::string::npos ||
+                resource_file_name_.find(".png") != std::string::npos) {
+                AddHeader(response_file_stat_.st_size, "image/jpeg");
+            } else if (resource_file_name_.find(".mp4") != std::string::npos) {
+                AddHeader(response_file_stat_.st_size, "video/mp4");
+            } else if (resource_file_name_.find(".flv") != std::string::npos) {
+                AddHeader(response_file_stat_.st_size, "video/x-flv");
+            } else {
+                AddHeader(response_file_stat_.st_size, "text/plain");
+            }
+            iov_[0].iov_base = write_buffer_;
+            iov_[0].iov_len = write_buffer_next_idx_;
+            iov_[1].iov_base = map_response_file_address_;
+            iov_[1].iov_len = response_file_stat_.st_size;
+            iov_count_ = 2;
+            byte_to_send = write_buffer_next_idx_ + response_file_stat_.st_size;
+            return true;
+        }
         case RESPONSE_CODE::BAD_RESPONSE: {
             const char *status_phrase{"Bad Request\0"};
             AddLine(response_code, status_phrase);
@@ -685,9 +736,9 @@ bool HTTPConnection::AddBody(const char *body) {
 void HTTPConnection::UpdateIov(int tmp, char *starts[]) {
     for (int i = 0; i < iov_count_; ++i) {
         if (tmp > 0 && iov_[i].iov_len > 0) {
-            unsigned used = iov_[i].iov_len < tmp ? iov_[i].iov_len : tmp;
+            unsigned used = (iov_[i].iov_len < tmp) ? iov_[i].iov_len : tmp;
             iov_[i].iov_len -= used;
-            iov_[i].iov_base = starts[i] + used;
+            iov_[i].iov_base = (char *) iov_[i].iov_base + used;  // 这里不能直接使用starts[i]，starts[i]其实从头到尾都没有发生过改变。
             tmp -= used;
         }
     }
@@ -770,6 +821,8 @@ void HTTPConnection::Establish(int client_fd, int epoll_fd, const sockaddr_in &c
     entry_dir_name_ = "";
     start_boundary_ = false;
     mines_count = 0;
+    mkdir_dir_name_ = "";
+    resource_file_name_ = "";
 }
 
 /**
@@ -815,6 +868,8 @@ void HTTPConnection::Init() {
     delete_file_name_.clear();
     share_file_name_.clear();
     entry_dir_name_.clear();
+    mkdir_dir_name_.clear();
+    resource_file_name_.clear();
     start_boundary_ = false;
     mines_count = 0;
 }
@@ -930,6 +985,14 @@ bool HTTPConnection::WriteHTTPMessage() {
     int flag = 10;
     while (true) {
         tmp = writev(client_fd_, iov_, iov_count_);
+        if (tmp == -1) {
+            if(errno == EWOULDBLOCK || errno == EAGAIN) {
+                sleep(1);
+                continue;
+            } else {
+                return false;
+            }
+        }
         if (tmp > 0) {
             byte_have_send = byte_have_send + tmp;
             byte_to_send = byte_to_send - tmp;
