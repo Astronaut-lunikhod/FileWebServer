@@ -12,7 +12,7 @@
 
     </form>
 </div>
-<div style="width:600px; border:1px dotted;text-align: center; margin:auto; padding:20px 0px;">
+<div style="width:640px; border:1px dotted;text-align: center; margin:auto; padding:20px 0px;">
     <div style="width:300px; text-align: left; margin: auto;">选择文件上传：</div>
     <br/>
     <form id="uploadfile" action="/upload" method="post" enctype="multipart/form-data" style="text-align: center;">
@@ -21,7 +21,7 @@
     </form>
 </div>
 
-<table border="1px" style="width: 600px;text-align: center; margin: auto; table-layout: fixed;">
+<table border="1px" style="width: 640px;text-align: center; margin: auto; table-layout: fixed;">
     <thead>
     <tr>
         <th>文件名</th>
@@ -34,13 +34,9 @@
 
     </tbody>
 </table>
-<!--<img src="/resource_image?file_name=1.jpg" width="100px" height="100px">-->
-<!--<video controls>-->
-<!--    <source src="/resource_image?file_name=1.mp4">-->
-<!--</video>-->
-<!--<video controls>-->
-<!--    <source src="/resource_image?file_name=2.mp4">-->
-<!--</video>-->
+<!-- 加载图片的示例 -->
+<!--<img src="/resource_image?file_name=saber.jpg" width="100px" height="100px">-->
+<!-- 加载视频的示例。 -->
 <!--<video controls>-->
 <!--    <source src="/resource_image?file_name=movie.mp4">-->
 <!--</video>-->
@@ -71,6 +67,9 @@
             preview_cell.appendChild(img);
         } else if(video_name != "") {
             var video_parent = document.createElement("video");
+            video_parent.controls = true
+            video_parent.width = 150;
+            video_parent.height = 150;
             var source = document.createElement("source");
             source.src = "/preview?file_name=" + video_name;
             video_parent.appendChild(source);

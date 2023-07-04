@@ -295,6 +295,18 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
             ret = RESPONSE_CODE::FORBIDDEN;
         }
     }
+    request = "/preview";
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/resource_image，不需要登录，因为这是系统要用的资源文件。
+        size_t equal_position = strrchr(url_, '=') - url_;  // 找到等号的位置，操作的文件就在等号的右边。
+        size_t split_position = request.find_last_of('/');  // 找到分割符号的位置。
+        if (split_position != 0) {  // 说明想要分级，这有可能是人为的，不正确。
+            return RESPONSE_CODE::FORBIDDEN;
+        }
+        resource_file_name_ = url_ + equal_position + 1;
+        std::string final_path = pwd_ + "/" + resource_file_name_;
+        strncpy(response_file_path_, final_path.c_str(), final_path.size());
+        ret = RESPONSE_CODE::RESOURCE_HTML;
+    }
     request = "/download2copy";
     if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download2copy请求，判断是否已经登录了,将已经分享的文件下载到本地。
         if (login_state_ &&
@@ -537,13 +549,15 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
                                 share_option = shares[i] ? "'取消分享':'unshare?file_name=" + names[i] + "'" :
                                                "'分享':'share?file_name=" + names[i] + "'";
                         std::string img_name = "", video_name = "";
-                        if (names[i].find_first_of(".mp4") != std::string::npos ||
-                            names[i].find_first_of(".flv") != std::string::npos) {
+                        if (names[i].find(".mp4") != std::string::npos ||
+                            names[i].find(".flv") != std::string::npos) {
                             video_name = names[i];
-                        } else if (names[i].find_first_of(".jpg") != std::string::npos ||
-                                   names[i].find_first_of(".png") != std::string::npos) {
+                        } else if (names[i].find(".jpg") != std::string::npos ||
+                                   names[i].find(".png") != std::string::npos) {
                             img_name = names[i];
                         }
+                        img_name = "";  // 因为会异步加载，所以这种记录用户登录的方式不合时宜了，需要更换为使用session。每一个资源都会建立一个新的连接来请求。
+                        video_name = "";  // 为了不加载video,不然要好久。
                         js_code = js_code + "append('" + names[i] + "', '" +
                                   (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
                                   "'删除':" + del_href + "'下载':" + download_href + share_option + "},'" + img_name +
@@ -559,13 +573,15 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
                         std::string download_href = "'download2copy?file_name=" + names[i] + "',",
                                 copy_href = "'copy?file_name=" + names[i] + "'";
                         std::string img_name = "", video_name = "";
-                        if (names[i].find_first_of(".mp4") != std::string::npos ||
-                            names[i].find_first_of(".flv") != std::string::npos) {
+                        if (names[i].find(".mp4") != std::string::npos ||
+                            names[i].find(".flv") != std::string::npos) {
                             video_name = names[i];
-                        } else if (names[i].find_first_of(".jpg") != std::string::npos ||
-                                   names[i].find_first_of(".png") != std::string::npos) {
+                        } else if (names[i].find(".jpg") != std::string::npos ||
+                                   names[i].find(".png") != std::string::npos) {
                             img_name = names[i];
                         }
+                        img_name = "";  // 因为会异步加载，所以这种记录用户登录的方式不合时宜了，需要更换为使用session。
+                        video_name = "";  // 为了不加载video,不然要好久。
                         js_code = js_code + "append('" + names[i] + "', '" +
                                   (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
                                   "'下载':" + download_href + "'拷贝':" + copy_href + "},'" + img_name + "', '" +
@@ -837,6 +853,7 @@ void HTTPConnection::Establish(int client_fd, int epoll_fd, const sockaddr_in &c
     delete_file_name_ = "";
     share_file_name_ = "";
     entry_dir_name_ = "";
+    copy_file_name_.clear();
     start_boundary_ = false;
     mines_count = 0;
     mkdir_dir_name_ = "";
@@ -879,13 +896,14 @@ void HTTPConnection::Init() {
     strcpy(response_file_path_, Config::get_singleton_()->http_connection_html_dir_path_.c_str());
     write_buffer_next_idx_ = 0;
     memset(write_buffer_, '\0', write_buffer_max_len_);
-    boundary_ = "";
+    boundary_.clear();
     blank_count_ = 0;
     upload_file_name_.clear();
     download_file_name_.clear();
     delete_file_name_.clear();
     share_file_name_.clear();
     entry_dir_name_.clear();
+    copy_file_name_.clear();
     mkdir_dir_name_.clear();
     resource_file_name_.clear();
     start_boundary_ = false;
@@ -1003,7 +1021,7 @@ bool HTTPConnection::WriteHTTPMessage() {
     int flag = 10;
     while (true) {
         tmp = writev(client_fd_, iov_, iov_count_);
-        if (tmp == -1) {
+        if (tmp == -1 && byte_to_send > 0) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
                 sleep(1);
                 continue;

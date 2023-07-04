@@ -94,7 +94,7 @@ private:
     std::string user_file_root_path_;  // 当前用户的根目录,这是不可以改变的。
     std::string pwd_;  // 用户当前站立的位置（默认是根目录），这里是可以移动改变的。
     std::string boundary_;  // 上传文件的时候使用的分界符。
-    int blank_count_ = 0;  // 记录空行出现次数，因为上传文件会有两次。
+    int blank_count_;  // 记录空行出现次数，因为上传文件会有两次。
     std::string upload_file_name_;  // 上传的文件的名字,回溯HTTP状态的时候也需要clear()。
     std::string download_file_name_;  // 用户本次想要下载的文件的名字，回溯的时候也需要clear()。
     std::string delete_file_name_;  // 删除文件的名字，回溯的时候需要clear()。
