@@ -46,6 +46,7 @@ Config::Config() {  // 用于赋值各种参数，别的模块可以通过单例
     strcpy(log_dir_name_, "../LogDir\0");
     strcpy(log_file_name_, "serverLog\0");
     log_max_queue_num = 10000;
+    alarm_interval_ = 5;
 }
 
 Config::~Config() {

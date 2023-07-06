@@ -22,8 +22,11 @@
 #include "../ThreadPool/ThreadPool.h"
 #include "../WebServer/WebServer.h"
 #include "../Redis/Redis.h"
+#include "../timer/timer.h"
 
 class HTTPConnection;
+class sort_timer_list;
+class Timer;
 
 class WebServer {
 private:
@@ -42,16 +45,21 @@ private:
     struct epoll_event *events_;  // 存放epoll监测结果的容器。
     unsigned connection_max_num_;  // 同时连接的最大连接数。
     bool reactor_;  // 是否使用reactor事件模型。
+    int pipe_[2];  // 读端和写端。
 public:
     static unsigned connection_num_;  // 当前建立连接的数量。
     static HTTPConnection *connections_;  // 记录连接。
     static std::unordered_map<std::string, std::unordered_set<int>> session_map_;  // 已经建立连接的对象以及对应的session建立的map。
+    static sort_timer_list sort_timer_list_;  // 计时器的升序链表。
+    static Timer **timers_;  // 对应fd个数的计时器，方便直接获取，用于操作链表。
 private:
     void EstablishConnection();  // 建立连接。
 
     void DealRead(int client_fd);  // 处理读信号。
 
     void DealWrite(int client_fd);  // 处理写信号。
+
+    void DealSig(int client_fd, bool &exit, bool &timeout);  // 处理alarm信号。
 public:
     WebServer();
 

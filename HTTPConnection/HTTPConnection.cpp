@@ -966,6 +966,7 @@ bool HTTPConnection::Process() {
         response_code = ConstructorHtml();  // 构造页面，并根据构造的结果返回状态码，用于填充响应头。
     }
     if (!ConstructResponse(response_code)) {  // 如果添加到缓存的过程中有错误直接关闭连接，如果是大文件，并不会添加到缓存中，而是映射到内存中。
+        WebServer::sort_timer_list_.DelTimer(WebServer::timers_[client_fd_]);  // 删除目标的计时器。
         Utils::DelEpoll(client_fd_, epoll_fd_);
         --WebServer::connection_num_;
         WebServer::session_map_[WebServer::connections_[client_fd_].session_].erase(client_fd_);  // 断开连接以后需要解除绑定。
@@ -1051,6 +1052,7 @@ bool HTTPConnection::WriteHTTPMessage() {
                 Utils::ModEpoll(client_fd_, epoll_fd_, true, level_trigger_, one_shot_); // 重新激活读事件
                 return true;
             } else {
+                WebServer::sort_timer_list_.DelTimer(WebServer::timers_[client_fd_]);  // 删除目标的计时器。
                 Utils::DelEpoll(client_fd_, epoll_fd_);
                 WebServer::connection_num_--;
                 WebServer::session_map_[WebServer::connections_[client_fd_].session_].erase(client_fd_);  // 断开连接以后需要解除绑定。

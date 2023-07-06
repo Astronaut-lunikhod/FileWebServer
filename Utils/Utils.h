@@ -7,7 +7,10 @@
 #define FILEWEBSERVER_UTILS_H
 
 #include <fcntl.h>
+#include <csignal>
+#include <cassert>
 #include <sys/epoll.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <iostream>
@@ -19,11 +22,14 @@
 #include <iomanip>
 #include <fstream>
 #include <random>
+#include "../Config/Config.h"
 
 class WebServer;
 
 class Utils {
 public:
+    static int read_sig_fd_;
+    static int send_sig_fd_;  // 分别是读写信号的套接字。
     /**
      * 设置fd为非阻塞的。
      * @param fd
@@ -283,6 +289,33 @@ public:
         return result;
     }
 
+    /**
+     * 设置sig信号的处理函数为handler
+     * @param sig
+     * @param handler
+     * @param restart
+     */
+    static void AddSig(int sig, void(handler)(int), bool restart) {
+        struct sigaction sa;
+        memset(&sa, '\0', sizeof(sa));
+        sa.sa_handler = handler;
+        if(restart) {
+            sa.sa_flags |= SA_RESTART;
+        }
+        sigfillset(&sa.sa_mask);
+        assert(sigaction(sig, &sa, nullptr) != -1);
+    }
+
+    /**
+     * 信号处理函数。
+     * @param sig
+     */
+    static void SigHandler(int sig) {
+        int save_errno = errno;
+        int msg = sig;
+        send(send_sig_fd_, (char *)&msg, 1, 0);
+        errno = save_errno;
+    }
 };
 
 #endif

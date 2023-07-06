@@ -52,6 +52,7 @@ void ThreadPool::run() {
                 if(work->ReceiveMessage()) {
                     work->Process();  // 如果处理过程中报错，连接会被关闭，如果成功，会触发写事件。
                 } else {
+                    WebServer::sort_timer_list_.DelTimer(WebServer::timers_[work->client_fd_]);  // 删除目标的计时器。
                     Utils::DelEpoll(work->client_fd_, work->epoll_fd_);
                     WebServer::connection_num_--;
                     WebServer::session_map_[WebServer::connections_[work->client_fd_].session_].erase(work->client_fd_);  // 断开连接以后需要解除绑定。

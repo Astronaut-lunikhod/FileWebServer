@@ -67,5 +67,6 @@ public:
     char log_dir_name_[256];  // 日志文件的文件夹路径。
     char log_file_name_[128];  // 日志文件的文件名字。
     unsigned log_max_queue_num;  // 日志的消息队列中最多有多少条消息。
+    unsigned alarm_interval_;  // 监测空闲连接的间隔时间。
 };
 #endif
