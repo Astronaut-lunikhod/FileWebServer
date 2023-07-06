@@ -19,6 +19,7 @@
 #include <fstream>
 #include "../WebServer/WebServer.h"
 #include "../MysqlConnectionPool/MysqlConnectionPool.h"
+#include "../Log/Log.h"
 
 class HTTPConnection {
 private:
@@ -57,8 +58,6 @@ private:
         NOT_FOUND = 404  // 内容未找到。
     };
 
-    sockaddr_in client_address_;
-
     unsigned read_buffer_max_len_;  // read_buffer_的大小。
     char *read_buffer_;
     unsigned read_next_idx_;  // read的下一个位置。
@@ -85,7 +84,6 @@ private:
     unsigned write_buffer_max_len_;
     char *write_buffer_;
     unsigned write_buffer_next_idx_;
-    bool login_state_;  // 登录状态，用于进入磁盘页面。
     bool new_js_;  // 是否new了js。
     char *js_;
 
@@ -111,6 +109,8 @@ public:
         PROCESS,
         WRITE
     };
+    sockaddr_in client_address_;
+    std::string session_;
 
     WORK_MODE work_mode_;
     int client_fd_;
@@ -119,6 +119,8 @@ public:
     bool one_shot_;  // 是否使用one_shot。
 
     struct iovec iov_[3];
+    bool login_state_;  // 登录状态，用于进入磁盘页面。
+
     int iov_count_;
     unsigned byte_to_send;  // 等待发送的。
     unsigned byte_have_send;  // 已经发送的。
@@ -150,7 +152,7 @@ public:
     ~HTTPConnection();
 
     void Establish(int client_fd, int epoll_fd,
-                   const sockaddr_in &client_address);  // 当建立了一个连接一个都需要使用这个函数进行初始化。Init是在完成了一个连接的所有操作之后，进行状态的回调。
+                   const sockaddr_in &client_address, const std::string &session);  // 当建立了一个连接一个都需要使用这个函数进行初始化。Init是在完成了一个连接的所有操作之后，进行状态的回调。
 
     void Init();  // 进行状态回调，回到刚建立连接的时候。
 
@@ -161,6 +163,8 @@ public:
     REQUEST_CODE AnalysisRequestMessage();  // 解析request报文，并返回对应的代码。
 
     bool WriteHTTPMessage();  // 发送缓冲区和请求体中的内容。
+
+    HTTPConnection& operator=(const HTTPConnection& other);
 };
 
 #endif

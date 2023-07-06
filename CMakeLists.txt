@@ -3,6 +3,6 @@ project(FileWebServer)
 
 set(CMAKE_CXX_STANDARD 11)
 
-add_executable(FileWebServer main.cpp Config/Config.h Config/Config.cpp HTTPConnection/HTTPConnection.h HTTPConnection/HTTPConnection.cpp WebServer/WebServer.h WebServer/WebServer.cpp Utils/Utils.h ThreadPool/ThreadPool.h ThreadPool/ThreadPool.cpp MysqlConnectionPool/MysqlConnectionPool.cpp)
+add_executable(FileWebServer main.cpp Config/Config.h Config/Config.cpp HTTPConnection/HTTPConnection.h HTTPConnection/HTTPConnection.cpp WebServer/WebServer.h WebServer/WebServer.cpp Utils/Utils.h ThreadPool/ThreadPool.h ThreadPool/ThreadPool.cpp MysqlConnectionPool/MysqlConnectionPool.cpp Redis/Redis.cpp Log/BlockQueue.h Log/Log.h Log/Log.cpp)
 
-target_link_libraries(FileWebServer pthread mysqlclient)
+target_link_libraries(FileWebServer pthread mysqlclient hiredis)

@@ -7,6 +7,7 @@
 #define FILEWEBSERVER_CONFIG_H
 #include <pthread.h>
 #include <string>
+#include <cstring>
 
 class Config {
 private:
@@ -53,5 +54,18 @@ public:
 
     std::string http_connection_file_dir_root_path_;  // 网盘的根目录。
     std::string http_connection_resource_dir_root_path_;  // 图片文件夹的根目录。
+    std::string redis_host_;
+    unsigned redis_port_;
+    std::string redis_password_;
+    unsigned redis_pool_max_count_;
+    unsigned redis_generator_session_length_;
+
+    bool open_log_;  // 是否打开日志功能。
+    bool open_async_log_;  // 是否打开异步记录日志功能。
+    unsigned log_buffer_max_size_;  // 日志行缓冲大小。
+    unsigned log_max_lines_;  // 一份日志文件最多记录多少行。
+    char log_dir_name_[256];  // 日志文件的文件夹路径。
+    char log_file_name_[128];  // 日志文件的文件名字。
+    unsigned log_max_queue_num;  // 日志的消息队列中最多有多少条消息。
 };
 #endif

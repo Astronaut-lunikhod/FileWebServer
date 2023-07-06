@@ -12,10 +12,16 @@
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <cerrno>
+#include <hiredis/hiredis.h>
+#include <arpa/inet.h>
+#include <unordered_map>
+#include <unordered_set>
 #include "../Config/Config.h"
 #include "../Utils/Utils.h"
 #include "../HTTPConnection/HTTPConnection.h"
 #include "../ThreadPool/ThreadPool.h"
+#include "../WebServer/WebServer.h"
+#include "../Redis/Redis.h"
 
 class HTTPConnection;
 
@@ -37,7 +43,7 @@ private:
     unsigned connection_max_num_;  // 同时连接的最大连接数。
     HTTPConnection *connections_;  // 记录连接。
     bool reactor_;  // 是否使用reactor事件模型。
-
+    std::unordered_map<std::string, std::unordered_set<int>> session_map_;  // 已经建立连接的对象以及对应的session建立的map。
 public:
     static unsigned connection_num_;  // 当前建立连接的数量。
 private:

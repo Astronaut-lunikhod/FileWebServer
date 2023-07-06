@@ -18,6 +18,7 @@
 #include <sstream>
 #include <iomanip>
 #include <fstream>
+#include <random>
 
 class WebServer;
 
@@ -249,12 +250,12 @@ public:
         std::ostringstream output;
 
         char c;
-        while(input.get(c)) {
-            if(c == '%') {
+        while (input.get(c)) {
+            if (c == '%') {
                 char hex[3] = {0};
-                if(input.get(hex, 3)) {
+                if (input.get(hex, 3)) {
                     int char_code;
-                    std::istringstream (hex) >> std::hex >> char_code;
+                    std::istringstream(hex) >> std::hex >> char_code;
                     output << static_cast<char> (char_code);
                 }
             } else {
@@ -263,6 +264,25 @@ public:
         }
         return output.str();
     }
+
+
+    /**
+     * 生成固定位数的sesison
+     * @param length
+     * @return
+     */
+    static std::string GenerationSession(int length) {
+        static std::string charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        std::random_device rd;
+        std::mt19937 generator(rd());
+        std::uniform_int_distribution<int> distribution(0, charset.length() - 1);
+        std::string result;
+        for (int i = 0; i < length; ++i) {
+            result += charset[distribution(generator)];
+        }
+        return result;
+    }
+
 };
 
 #endif

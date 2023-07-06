@@ -296,7 +296,7 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
         }
     }
     request = "/preview";
-    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/resource_image，不需要登录，因为这是系统要用的资源文件。
+    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/preview，需要登录，因为这是系统要用的资源文件。
         size_t equal_position = strrchr(url_, '=') - url_;  // 找到等号的位置，操作的文件就在等号的右边。
         size_t split_position = request.find_last_of('/');  // 找到分割符号的位置。
         if (split_position != 0) {  // 说明想要分级，这有可能是人为的，不正确。
@@ -365,26 +365,6 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
             ret = RESPONSE_CODE::FORBIDDEN;
         }
     }
-    request = "/delete";
-    if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download请求，判断是否已经登录了。
-        if (login_state_ &&
-            (Utils::InDir(user_file_root_path_, pwd_) || user_file_root_path_ == pwd_)) {  // 登录,并且当前的位置处于目标自己的根目录之下。
-            strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
-            const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
-            delete_file_name_ = pos + 1;
-            if (delete_file_name_.find_first_of('/') != std::string::npos ||
-                delete_file_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
-                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
-                ret = RESPONSE_CODE::FORBIDDEN;
-            } else {
-                remove((pwd_ + "/" + delete_file_name_).c_str());  // 删除对应的文件以后，再次走Disk.html的流程。
-                ret = RESPONSE_CODE::DISK_HTML;
-            }
-        } else {  // 没有权限访问。
-            strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
-            ret = RESPONSE_CODE::FORBIDDEN;
-        }
-    }
     request = "/deleteDir";
     if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download请求，判断是否已经登录了。
         if (login_state_ &&
@@ -403,6 +383,28 @@ HTTPConnection::RESPONSE_CODE HTTPConnection::ConstructorHtml() {
         } else {  // 没有权限访问。
             strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
             ret = RESPONSE_CODE::FORBIDDEN;
+        }
+    } else {  // 这一段需要特殊处理一下，因为/delete和/deleteDir是同样前缀，可能会误解。
+        request = "/delete";
+        if (strncmp(p, request.c_str(), strlen(request.c_str())) == 0) {  // 如果是/download请求，判断是否已经登录了。
+            if (login_state_ &&
+                (Utils::InDir(user_file_root_path_, pwd_) ||
+                 user_file_root_path_ == pwd_)) {  // 登录,并且当前的位置处于目标自己的根目录之下。
+                strncpy(response_file_path_ + len, "/disk.html\0", strlen("/disk.html\0"));  // 响应的请求体对应的文件。
+                const char *pos = strrchr(url_, '=');  // 找到等号的位置，操作的文件就在等号的右边。
+                delete_file_name_ = pos + 1;
+                if (delete_file_name_.find_first_of('/') != std::string::npos ||
+                    delete_file_name_.find_first_of('\\') != std::string::npos) {  // 说明存在恶意调用,限制操作级别只能是一个级别之内。
+                    strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                    ret = RESPONSE_CODE::FORBIDDEN;
+                } else {
+                    remove((pwd_ + "/" + delete_file_name_).c_str());  // 删除对应的文件以后，再次走Disk.html的流程。
+                    ret = RESPONSE_CODE::DISK_HTML;
+                }
+            } else {  // 没有权限访问。
+                strncpy(response_file_path_ + len, "/forbidden.html\0", strlen("/forbidden.html\0"));
+                ret = RESPONSE_CODE::FORBIDDEN;
+            }
         }
     }
     request = "/enter";
@@ -529,6 +531,15 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
             const char *status_phrase{"OK\0"};
             AddLine(200, status_phrase);
             std::string js_code = "<script>";
+            std::string show_position = pwd_.substr(10);
+            if (show_position.empty()) {  // 默认的根目录。
+                show_position = "/";
+            }
+            js_code = js_code + "document.getElementById(\"pwd\").textContent = \"当前位置:" + show_position + "\";";
+            if (Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_,
+                             pwd_)) {  // pwd一定在文件系统的根目录之下，不能突破出去。
+                js_code = js_code + "show_back_option('/back');";  // 只发送back，这样跳转到哪里，直接在构造请求体的逻辑之中修改pwd就行。
+            }
             std::vector<std::string> names;
             std::vector<bool> shares;
             std::vector<bool> is_dirs;
@@ -542,7 +553,7 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
                                                "'分享':'share?file_name=" + names[i] + "'";
                         js_code = js_code + "append('" + names[i] + "', '" +
                                   (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
-                                  "'删除':" + del_href + "'进入':" + enter_href + share_option + "});";
+                                  "'删除':" + del_href + "'进入':" + enter_href + share_option + "},'','');";
                     } else {
                         std::string del_href = "'delete?file_name=" + names[i] + "',",
                                 download_href = "'download?file_name=" + names[i] + "',",
@@ -556,7 +567,7 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
                                    names[i].find(".png") != std::string::npos) {
                             img_name = names[i];
                         }
-                        img_name = "";  // 因为会异步加载，所以这种记录用户登录的方式不合时宜了，需要更换为使用session。每一个资源都会建立一个新的连接来请求。
+//                        img_name = "";  // 因为会异步加载，所以这种记录用户登录的方式不合时宜了，需要更换为使用session。每一个资源都会建立一个新的连接来请求。
                         video_name = "";  // 为了不加载video,不然要好久。
                         js_code = js_code + "append('" + names[i] + "', '" +
                                   (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
@@ -568,7 +579,7 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
                         std::string enter_href = "'enter?file_name=" + names[i] + "'";
                         js_code = js_code + "append('" + names[i] + "', '" +
                                   (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
-                                  +"'进入':" + enter_href + "});";
+                                  +"'进入':" + enter_href + "},'','');";
                     } else {  // 显示文件名、状态、下载、拷贝
                         std::string download_href = "'download2copy?file_name=" + names[i] + "',",
                                 copy_href = "'copy?file_name=" + names[i] + "'";
@@ -580,7 +591,7 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
                                    names[i].find(".png") != std::string::npos) {
                             img_name = names[i];
                         }
-                        img_name = "";  // 因为会异步加载，所以这种记录用户登录的方式不合时宜了，需要更换为使用session。
+//                        img_name = "";  // 因为会异步加载，所以这种记录用户登录的方式不合时宜了，需要更换为使用session。
                         video_name = "";  // 为了不加载video,不然要好久。
                         js_code = js_code + "append('" + names[i] + "', '" +
                                   (shares[i] ? "所有人可见" : "仅自己可见") + "', {" +
@@ -588,15 +599,6 @@ bool HTTPConnection::ConstructResponse(HTTPConnection::RESPONSE_CODE response_co
                                   video_name + "');";
                     }
                 }
-            }
-            std::string show_position = pwd_.substr(10);
-            if (show_position.empty()) {  // 默认的根目录。
-                show_position = "/";
-            }
-            js_code = js_code + "document.getElementById(\"pwd\").textContent = \"当前位置:" + show_position + "\";";
-            if (Utils::InDir(Config::get_singleton_()->http_connection_file_dir_root_path_,
-                             pwd_)) {  // pwd一定在文件系统的根目录之下，不能突破出去。
-                js_code = js_code + "show_back_option('/back');";  // 只发送back，这样跳转到哪里，直接在构造请求体的逻辑之中修改pwd就行。
             }
             js_code = js_code + "</script>";
             AddHeader(response_file_stat_.st_size + js_code.size(), "text/html;utf-8");
@@ -736,6 +738,7 @@ bool HTTPConnection::AddResponse(const char *format, ...) {
  * @return
  */
 bool HTTPConnection::AddLine(int response_code, const char *response_phrase) {
+    Log::get_log_singleton_instance_()->write_log(Log::LOG_LEVEL::INFO, "服务器向 %s 返回请求 %s %d %s\r\n", inet_ntoa(client_address_.sin_addr), "HTTP/1.1", response_code, response_phrase);
     return AddResponse("%s %d %s\r\n", "HTTP/1.1", response_code, response_phrase);
 }
 
@@ -817,7 +820,8 @@ HTTPConnection::~HTTPConnection() {
  * @param epoll_fd
  * @param client_address
  */
-void HTTPConnection::Establish(int client_fd, int epoll_fd, const sockaddr_in &client_address) {
+void HTTPConnection::Establish(int client_fd, int epoll_fd, const sockaddr_in &client_address, const std::string &session) {
+    this->session_ = session;
     ++WebServer::connection_num_;
     client_fd_ = client_fd;
     epoll_fd_ = epoll_fd;
@@ -991,6 +995,7 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisRequestMessage() {
         switch (main_machine_state_) {  // 根据主状态机的状态进行不同情况的解析。
             case MAIN_MACHINE_STATE::LINE:
                 request_code = AnalysisLine(line);
+                Log::get_log_singleton_instance_()->write_log(Log::LOG_LEVEL::INFO, "%s 发起了请求 %s", inet_ntoa(client_address_.sin_addr), url_);
                 if (request_code == REQUEST_CODE::BAD_REQUEST) {  // 解析出现问题了，直接返回。
                     return request_code;
                 }
@@ -1051,4 +1056,29 @@ bool HTTPConnection::WriteHTTPMessage() {
             }
         }
     }
+}
+
+
+HTTPConnection &HTTPConnection::operator=(const HTTPConnection &other) {
+    this->read_buffer_max_len_ = other.read_buffer_max_len_;
+    memset(this->read_buffer_, '\0', other.read_buffer_max_len_);
+    this->read_next_idx_ = 0;
+    this->main_next_idx_ = 0;
+    this->sub_next_idx_ = 0;
+    this->sub_machine_state_ = SUB_MACHINE_STATE::GOOD_LINE;
+    this->main_machine_state_ = MAIN_MACHINE_STATE::LINE;
+    this->method_ = METHOD::GET;
+    this->response_file_path_max_len_ = other.response_file_path_max_len_;
+    this->write_buffer_max_len_ = other.write_buffer_max_len_;
+    memset(write_buffer_, '\0', other.write_buffer_max_len_);
+    this->write_buffer_next_idx_ = 0;
+    this->login_state_ = other.login_state_;
+    this->user_id_ = other.user_id_;
+    this->username_ = other.username_;
+    this->user_file_root_path_ = other.user_file_root_path_;
+    this->pwd_ = other.pwd_;
+    this->epoll_fd_ = other.epoll_fd_;
+    this->level_trigger_ = other.level_trigger_;
+    this->one_shot_ = other.one_shot_;
+    return *this;
 }

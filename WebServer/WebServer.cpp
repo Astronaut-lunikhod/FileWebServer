@@ -21,7 +21,19 @@ void WebServer::EstablishConnection() {
         if (connection_num_ >= connection_max_num_) {
             return;
         }
-        connections_[client_fd].Establish(client_fd, epoll_fd_, client_address);
+
+        redisContext *context = nullptr;
+        std::string session = "";
+        if (Redis::get_singleton_()->GetConnection(&context)) {  // 申请redis连接，准备插入内容。如果连接建立失败，没有后续操作。
+            session = Redis::get_singleton_()->SessionExists(context, inet_ntoa(
+                    client_address.sin_addr));  // 找出目标ip地址的session字符串。
+            Redis::get_singleton_()->ReleaseConnection(context);  // 用完立即释放掉。
+            if (session_map_.find(session) == session_map_.end()) {  // 某一个IP第一次连接服务器,创建对应的HTTP对象，这个IP地址以后只能使用这一个对象。
+                session_map_[session].insert(client_fd);
+            }
+        }
+        connections_[client_fd].Establish(client_fd, epoll_fd_, client_address, session);
+        session_map_[session].insert(client_fd);  // 不管怎样，先将所有同一个IP的请求，绑定到一起。
         Utils::AddEpoll(client_fd, epoll_fd_, true, connection_level_trigger_, connection_one_shot_);
     } while (!listen_level_trigger_);  // 如果是水平触发，监测一次。否则就监测多次。
 }
@@ -30,10 +42,10 @@ void WebServer::EstablishConnection() {
  * 处理读信号。
  */
 void WebServer::DealRead(int client_fd) {
-    if(reactor_) {  // reactor模式，任务全部交给线程池。
+    if (reactor_) {  // reactor模式，任务全部交给线程池。
         ThreadPool::get_singleton_()->append(connections_ + client_fd, HTTPConnection::WORK_MODE::READ);
     } else {  // proactor,读写主线程处理，逻辑处理交给线程池。
-        if(connections_[client_fd].ReceiveMessage()) {  // 接收成功以后，将处理逻辑的任务交给子线程。
+        if (connections_[client_fd].ReceiveMessage()) {  // 接收成功以后，将处理逻辑的任务交给子线程。
             ThreadPool::get_singleton_()->append(connections_ + client_fd, HTTPConnection::WORK_MODE::PROCESS);
         } else {  // 接收的过程中出现了错误，那肯定要关闭这个套接字。
             Utils::DelEpoll(client_fd, epoll_fd_);
@@ -47,8 +59,9 @@ void WebServer::DealRead(int client_fd) {
  * @param client_fd
  */
 void WebServer::DealWrite(int client_fd) {
-    if(reactor_) {
-        ThreadPool::get_singleton_()->append(connections_ + client_fd, HTTPConnection::WORK_MODE::WRITE);  // reactor模式，将写事件交给子线程。
+    if (reactor_) {
+        ThreadPool::get_singleton_()->append(connections_ + client_fd,
+                                             HTTPConnection::WORK_MODE::WRITE);  // reactor模式，将写事件交给子线程。
     } else {
         connections_[client_fd].WriteHTTPMessage();  // 成功了会自动激活读事件，失败了自动删除。
     }
@@ -128,9 +141,22 @@ void WebServer::EpollLoop() {
                 Utils::DelEpoll(fd, epoll_fd_);
                 connection_num_--;
             } else if (events_[i].events & EPOLLIN) {  // 读事件已经就绪。
+                for (auto ite = session_map_[connections_[fd].session_].begin();
+                     ite != session_map_[connections_[fd].session_].end(); ++ite) {  // 循环遍历所有的连接的登录状态。
+                    if(connections_[*ite].login_state_) {  // 如果有登录了的，将所有的都改为登录状态。
+                        for (int jte : session_map_[connections_[fd].session_]) {
+                            if(!connections_[jte].login_state_)
+                                connections_[jte] = connections_[*ite];
+                        }
+                        break;
+                    }
+                }
                 DealRead(fd);
-            } else if(events_[i].events & EPOLLOUT) {  // 写事件已经就绪。
+            } else if (events_[i].events & EPOLLOUT) {  // 写事件已经就绪。
                 DealWrite(fd);
+                for (int jte : session_map_[connections_[fd].session_]) {  // 如果有类似于back的请求，那需要修改相关套接字的pwd_状态。
+                        connections_[jte] = connections_[fd];
+                }
             }
         }
     }
