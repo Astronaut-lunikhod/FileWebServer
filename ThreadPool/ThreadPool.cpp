@@ -54,6 +54,7 @@ void ThreadPool::run() {
                 } else {
                     Utils::DelEpoll(work->client_fd_, work->epoll_fd_);
                     WebServer::connection_num_--;
+                    WebServer::session_map_[WebServer::connections_[work->client_fd_].session_].erase(work->client_fd_);  // 断开连接以后需要解除绑定。
                 }
             } else {
                 work->WriteHTTPMessage();  // 成功了会自动激活读事件，失败了自动删除。

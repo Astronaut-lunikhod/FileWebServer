@@ -41,11 +41,11 @@ private:
     unsigned epoll_events_max_size_;  // 容器的大小。
     struct epoll_event *events_;  // 存放epoll监测结果的容器。
     unsigned connection_max_num_;  // 同时连接的最大连接数。
-    HTTPConnection *connections_;  // 记录连接。
     bool reactor_;  // 是否使用reactor事件模型。
-    std::unordered_map<std::string, std::unordered_set<int>> session_map_;  // 已经建立连接的对象以及对应的session建立的map。
 public:
     static unsigned connection_num_;  // 当前建立连接的数量。
+    static HTTPConnection *connections_;  // 记录连接。
+    static std::unordered_map<std::string, std::unordered_set<int>> session_map_;  // 已经建立连接的对象以及对应的session建立的map。
 private:
     void EstablishConnection();  // 建立连接。
 

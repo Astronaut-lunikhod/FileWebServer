@@ -6,6 +6,8 @@
 #include "WebServer.h"
 
 unsigned WebServer::connection_num_ = 0;
+HTTPConnection *WebServer::connections_;  // 记录连接。
+std::unordered_map<std::string, std::unordered_set<int>> WebServer::session_map_;  // 已经建立连接的对象以及对应的session建立的map。
 
 /**
  * 建立连接
@@ -49,6 +51,7 @@ void WebServer::DealRead(int client_fd) {
             ThreadPool::get_singleton_()->append(connections_ + client_fd, HTTPConnection::WORK_MODE::PROCESS);
         } else {  // 接收的过程中出现了错误，那肯定要关闭这个套接字。
             Utils::DelEpoll(client_fd, epoll_fd_);
+            session_map_[connections_[client_fd].session_].erase(client_fd);  // 断开连接以后需要解除绑定。
             connections_--;
         }
     }
@@ -139,6 +142,7 @@ void WebServer::EpollLoop() {
                 EstablishConnection();
             } else if (events_[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {  // 出错了
                 Utils::DelEpoll(fd, epoll_fd_);
+                session_map_[connections_[fd].session_].erase(fd);  // 断开连接以后需要解除绑定。
                 connection_num_--;
             } else if (events_[i].events & EPOLLIN) {  // 读事件已经就绪。
                 for (auto ite = session_map_[connections_[fd].session_].begin();

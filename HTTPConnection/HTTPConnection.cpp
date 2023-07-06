@@ -968,6 +968,7 @@ bool HTTPConnection::Process() {
     if (!ConstructResponse(response_code)) {  // 如果添加到缓存的过程中有错误直接关闭连接，如果是大文件，并不会添加到缓存中，而是映射到内存中。
         Utils::DelEpoll(client_fd_, epoll_fd_);
         --WebServer::connection_num_;
+        WebServer::session_map_[WebServer::connections_[client_fd_].session_].erase(client_fd_);  // 断开连接以后需要解除绑定。
         return false;
     }
     Utils::ModEpoll(client_fd_, epoll_fd_, false, level_trigger_, one_shot_);  // 告知主线程，开始写事件。
@@ -1052,6 +1053,7 @@ bool HTTPConnection::WriteHTTPMessage() {
             } else {
                 Utils::DelEpoll(client_fd_, epoll_fd_);
                 WebServer::connection_num_--;
+                WebServer::session_map_[WebServer::connections_[client_fd_].session_].erase(client_fd_);  // 断开连接以后需要解除绑定。
                 return false;
             }
         }
