@@ -996,13 +996,15 @@ HTTPConnection::REQUEST_CODE HTTPConnection::AnalysisRequestMessage() {
         line = read_buffer_ + main_next_idx_;  // 因为从状态机的标头移动的更快，所以根据快慢指针，可以取出其中的部分作为一行。所以下面的情况都是切割好的。开始进行解析。
         switch (main_machine_state_) {  // 根据主状态机的状态进行不同情况的解析。
             case MAIN_MACHINE_STATE::LINE:
-                request_code = AnalysisLine(line);
                 Log::get_log_singleton_instance_()->write_log(Log::LOG_LEVEL::INFO, "%s 发起了请求 %s", inet_ntoa(client_address_.sin_addr), url_);
+                Log::get_log_singleton_instance_()->write_log(Log::LOG_LEVEL::DEBUG, "请求行的内容 %s", line);
+                request_code = AnalysisLine(line);
                 if (request_code == REQUEST_CODE::BAD_REQUEST) {  // 解析出现问题了，直接返回。
                     return request_code;
                 }
                 break;
             case MAIN_MACHINE_STATE::HEAD:
+                Log::get_log_singleton_instance_()->write_log(Log::LOG_LEVEL::DEBUG, "请求头的内容 %s", line);
                 request_code = AnalysisHead(line);  // 如果是继续解析，是不需要返回的，并没有出错。
                 if (request_code == REQUEST_CODE::GOOD_REQUEST) {  // 解析任务完成，直接返回。
                     return request_code;

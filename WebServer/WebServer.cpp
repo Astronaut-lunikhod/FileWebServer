@@ -204,7 +204,8 @@ void WebServer::EpollLoop() {
             } else if (events_[i].events & EPOLLOUT) {  // 写事件已经就绪。
                 DealWrite(fd);
                 for (int jte: session_map_[connections_[fd].session_]) {  // 如果有类似于back的请求，那需要修改相关套接字的pwd_状态。
-                    connections_[jte] = connections_[fd];
+                    if(jte != fd)  // 同一个内容就别操作了，会有溢出的问题。
+                        connections_[jte] = connections_[fd];
                 }
             }
         }
