@@ -10,23 +10,23 @@ pthread_mutex_t Config::singleton_mutex_ = PTHREAD_MUTEX_INITIALIZER;  // 默认
 
 Config::Config() {  // 用于赋值各种参数，别的模块可以通过单例模型直接拿到内容。
     thread_pool_thread_num_ = 8;
-    thread_pool_work_queue_max_size_ = 1024;
+    thread_pool_work_queue_max_size_ = (1 << 15);
     thread_pool_reactor_ = true;
     web_server_elegant_close_ = true;
     web_server_reuse_ = true;
     web_server_server_port_ = 7777;
-    web_server_listen_queue_max_size_ = 1024;
-    web_server_epoll_meanwhile_listen_max_num_ = 1024;
+    web_server_listen_queue_max_size_ = (1 << 14);
+    web_server_epoll_meanwhile_listen_max_num_ = (1 << 14);
     web_server_listen_level_trigger_ = true;
     web_server_connection_level_trigger_ = false;
     web_server_listen_one_shot_ = false;  // 这个是固定的，一定是false。
     web_server_connection_one_shot_ = true;
-    web_server_epoll_events_max_size_ = 1024;
-    web_server_connection_max_num_ = 1024;
-    http_connection_read_buffer_max_len_ = 41943040;
+    web_server_epoll_events_max_size_ = (1 << 14);
+    web_server_connection_max_num_ = (1 << 14);
+    http_connection_read_buffer_max_len_ = 1024;
     http_connection_response_file_path_max_len_ = 256;
     http_connection_html_dir_path_ = "../HTMLDir";
-    http_connection_write_buffer_max_len_ = 41943040;
+    http_connection_write_buffer_max_len_ = 1024;
     mysql_host_ = "127.0.0.1";
     mysql_port_ = "3306";
     mysql_username_ = "root";
@@ -41,11 +41,11 @@ Config::Config() {  // 用于赋值各种参数，别的模块可以通过单例
     redis_pool_max_count_ = 8;
     redis_generator_session_length_ = 16;
     open_log_ = true;
-    log_buffer_max_size_ = 2048;
-    log_max_lines_ = 100000;
+    log_buffer_max_size_ = 1024;
+    log_max_lines_ = (1 << 20);
     strcpy(log_dir_name_, "../LogDir\0");
     strcpy(log_file_name_, "serverLog\0");
-    log_max_queue_num = 10000;
+    log_max_queue_num = (1 << 13);
     alarm_interval_ = 5;
 }
 

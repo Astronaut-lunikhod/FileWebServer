@@ -969,7 +969,9 @@ bool HTTPConnection::Process() {
         WebServer::sort_timer_list_.DelTimer(WebServer::timers_[client_fd_]);  // 删除目标的计时器。
         Utils::DelEpoll(client_fd_, epoll_fd_);
         --WebServer::connection_num_;
+        pthread_mutex_lock(&WebServer::session_map_mutex_);
         WebServer::session_map_[WebServer::connections_[client_fd_].session_].erase(client_fd_);  // 断开连接以后需要解除绑定。
+        pthread_mutex_unlock(&WebServer::session_map_mutex_);
         return false;
     }
     Utils::ModEpoll(client_fd_, epoll_fd_, false, level_trigger_, one_shot_);  // 告知主线程，开始写事件。
@@ -1057,7 +1059,9 @@ bool HTTPConnection::WriteHTTPMessage() {
                 WebServer::sort_timer_list_.DelTimer(WebServer::timers_[client_fd_]);  // 删除目标的计时器。
                 Utils::DelEpoll(client_fd_, epoll_fd_);
                 WebServer::connection_num_--;
+                pthread_mutex_lock(&WebServer::session_map_mutex_);
                 WebServer::session_map_[WebServer::connections_[client_fd_].session_].erase(client_fd_);  // 断开连接以后需要解除绑定。
+                pthread_mutex_unlock(&WebServer::session_map_mutex_);
                 return false;
             }
         }

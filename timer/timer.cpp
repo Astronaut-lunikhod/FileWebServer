@@ -144,12 +144,15 @@ void sort_timer_list::Tick(int epoll_fd) {
         if (cur < tmp->expire_) {  // 停止过期，也即tmp还没有到期。
             break;
         }
-        Log::get_log_singleton_instance_()->write_log(Log::LOG_LEVEL::WARNING, "服务器关闭了与%s的一个连接", inet_ntoa(tmp->con_.client_address.sin_addr));
+        Log::get_log_singleton_instance_()->write_log(Log::LOG_LEVEL::WARNING, "服务器关闭了与%s的一个连接",
+                                                      inet_ntoa(tmp->con_.client_address.sin_addr));
         // 关闭对应的文件描述符的监听事件，以及关闭文件描述。其实也就是DelEpoll。Del固定的三步。
         Utils::DelEpoll(tmp->con_.socket_fd_, epoll_fd);
         WebServer::connection_num_--;
+        pthread_mutex_lock(&WebServer::session_map_mutex_);
         WebServer::session_map_[WebServer::connections_[tmp->con_.socket_fd_].session_].erase(
                 tmp->con_.socket_fd_);  // 断开连接以后需要解除绑定。
+        pthread_mutex_unlock(&WebServer::session_map_mutex_);
         head = tmp->next;
         if (head) {  // 判断删除以后是否为空，如果为空，那就不用设置前缀了。
             head->pre = nullptr;

@@ -49,6 +49,7 @@ private:
 public:
     static unsigned connection_num_;  // 当前建立连接的数量。
     static HTTPConnection *connections_;  // 记录连接。
+    static pthread_mutex_t session_map_mutex_;  // 操作session_map需要锁。
     static std::unordered_map<std::string, std::unordered_set<int>> session_map_;  // 已经建立连接的对象以及对应的session建立的map。
     static sort_timer_list sort_timer_list_;  // 计时器的升序链表。
     static Timer **timers_;  // 对应fd个数的计时器，方便直接获取，用于操作链表。
