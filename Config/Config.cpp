@@ -18,7 +18,7 @@ Config::Config() {  // 用于赋值各种参数，别的模块可以通过单例
     web_server_listen_queue_max_size_ = (1 << 14);
     web_server_epoll_meanwhile_listen_max_num_ = (1 << 14);
     web_server_listen_level_trigger_ = true;
-    web_server_connection_level_trigger_ = false;
+    web_server_connection_level_trigger_ = true;
     web_server_listen_one_shot_ = false;  // 这个是固定的，一定是false。
     web_server_connection_one_shot_ = true;
     web_server_epoll_events_max_size_ = (1 << 14);
