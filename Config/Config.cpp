@@ -33,8 +33,8 @@ Config::Config() {  // 用于赋值各种参数，别的模块可以通过单例
     mysql_password_ = "";
     mysql_database_name_ = "FileWebServer";
     mysql_connection_max_num_ = 8;
-    http_connection_file_dir_root_path_ = "../FileDir";
-    http_connection_resource_dir_root_path_ = "../ResourceDir";
+    http_connection_file_dir_root_path_ = "./FileDir";
+    http_connection_resource_dir_root_path_ = "./ResourceDir";
     redis_host_ = "localhost";
     redis_port_ = 6379;
     redis_password_ = "123456";
@@ -43,7 +43,7 @@ Config::Config() {  // 用于赋值各种参数，别的模块可以通过单例
     open_log_ = true;
     log_buffer_max_size_ = 1024;
     log_max_lines_ = (1 << 20);
-    strcpy(log_dir_name_, "../LogDir\0");
+    strcpy(log_dir_name_, "./LogDir\0");
     strcpy(log_file_name_, "serverLog\0");
     log_max_queue_num = (1 << 13);
     alarm_interval_ = 5;

@@ -10,6 +10,7 @@
 sort_timer_list::sort_timer_list() {
     head = nullptr;
     tail = nullptr;
+    pthread_mutex_init(&mutex_, nullptr);
 }
 
 sort_timer_list::~sort_timer_list() {
@@ -19,6 +20,7 @@ sort_timer_list::~sort_timer_list() {
         delete tmp;
         tmp = head;
     }
+    pthread_mutex_destroy(&mutex_);
 }
 
 /**
@@ -26,19 +28,24 @@ sort_timer_list::~sort_timer_list() {
  * @param timer
  */
 void sort_timer_list::AddTimer(Timer *timer) {
+    pthread_mutex_lock(&mutex_);
     if (nullptr == timer) {
+        pthread_mutex_unlock(&mutex_);
         return;
     }
     if (nullptr == head) {
         head = tail = timer;
+        pthread_mutex_unlock(&mutex_);
         return;
     }
     if (timer->expire_ < head->expire_) {  // 时间比头还小，直接插在头上。
         timer->next = head;
         head->pre = timer;
         head = timer;
+        pthread_mutex_unlock(&mutex_);
         return;
     }
+    pthread_mutex_unlock(&mutex_);
     InsertTime(timer, head);
 }
 
@@ -48,7 +55,9 @@ void sort_timer_list::AddTimer(Timer *timer) {
  * @param mid
  */
 void sort_timer_list::InsertTime(Timer *timer, Timer *mid) {
+    pthread_mutex_lock(&mutex_);
     if (!timer) {  // timer不能是空
+        pthread_mutex_unlock(&mutex_);
         return;
     }
     Timer *pre = mid, *post = mid->next;
@@ -58,6 +67,7 @@ void sort_timer_list::InsertTime(Timer *timer, Timer *mid) {
             timer->next = post;
             post->pre = timer;
             timer->pre = pre;
+            pthread_mutex_unlock(&mutex_);
             return;
         }
         pre = post;
@@ -69,6 +79,7 @@ void sort_timer_list::InsertTime(Timer *timer, Timer *mid) {
         timer->next = nullptr;
         tail = timer;
     }
+    pthread_mutex_unlock(&mutex_);
 }
 
 /**
@@ -76,24 +87,30 @@ void sort_timer_list::InsertTime(Timer *timer, Timer *mid) {
  * @param timer
  */
 void sort_timer_list::AdjustTimer(Timer *timer) {
+    pthread_mutex_lock(&mutex_);
     if (!timer) {
+        pthread_mutex_unlock(&mutex_);
         return;
     }
-    if (timer == tail) {  // 要调整的定时器在结尾的地方，那就没有要调整的必要了。
+    if (timer->next == nullptr || timer == tail) {  // 要调整的定时器在结尾的地方，那就没有要调整的必要了。
+        pthread_mutex_unlock(&mutex_);
         return;
     }
     if (timer->expire_ < timer->next->expire_) {  // 调整以后还是小，那就没有必要调整。
+        pthread_mutex_unlock(&mutex_);
         return;
     }
     // 能到达这里，说明肯定是需要调整位置的。
-    if (timer == head) {
+    if (timer == head || timer->pre == nullptr) {
         head = head->next;
         head->pre = nullptr;
         timer->next = nullptr;
+        pthread_mutex_unlock(&mutex_);
         AddTimer(timer);  // 重新插入位置。
     } else {  // 定时器在head和tail中间,取出这个定时器，进行重新插入。
         timer->pre->next = timer->next;
         timer->next->pre = timer->pre;
+        pthread_mutex_unlock(&mutex_);
         InsertTime(timer, timer->next);
     }
 }
@@ -103,31 +120,41 @@ void sort_timer_list::AdjustTimer(Timer *timer) {
  * @param timer
  */
 void sort_timer_list::DelTimer(Timer *timer) {
+    pthread_mutex_lock(&mutex_);
     if (nullptr == timer) {
+        pthread_mutex_unlock(&mutex_);
         return;
     }
     if (timer == head && timer == tail) {
         delete timer;
         head = nullptr;
         tail = nullptr;
+        pthread_mutex_unlock(&mutex_);
         return;
     }
-    if (timer->pre == nullptr) {
+    if(head == nullptr && tail == nullptr) {  // 说明已经在别的地方被删除过了，可以不再删除。
+        pthread_mutex_unlock(&mutex_);
+        return;
+    }
+    if (timer->pre == nullptr || timer == head) {
         head = head->next;
         head->pre = nullptr;
         delete timer;
+        pthread_mutex_unlock(&mutex_);
         return;
     }
-    if (timer->next == nullptr) {
+    if (timer->next == nullptr || timer == tail) {
         tail = tail->pre;
         tail->next = nullptr;
         delete timer;
+        pthread_mutex_unlock(&mutex_);
         return;
     }
     // 能到这里，说明删除的部分在中间。
     timer->pre->next = timer->next;
     timer->next->pre = timer->pre;
     delete timer;
+    pthread_mutex_unlock(&mutex_);
 }
 
 /**
@@ -135,7 +162,9 @@ void sort_timer_list::DelTimer(Timer *timer) {
  */
 void sort_timer_list::Tick(int epoll_fd) {
     Log::get_log_singleton_instance_()->write_log(Log::LOG_LEVEL::INFO, "进行一次定时器检查。");
+    pthread_mutex_lock(&mutex_);
     if (!head) {  // 没有内容直接结束。
+        pthread_mutex_unlock(&mutex_);
         return;
     }
     time_t cur = time(nullptr);
@@ -160,4 +189,5 @@ void sort_timer_list::Tick(int epoll_fd) {
         delete tmp;
         tmp = head;
     }
+    pthread_mutex_unlock(&mutex_);
 }

@@ -31,6 +31,7 @@ class sort_timer_list {  // 升序链表。
 private:
     Timer *head;  // 头尾节点不会为空，如果有内容的话。
     Timer *tail;
+    pthread_mutex_t  mutex_;
 public:
     sort_timer_list();
 

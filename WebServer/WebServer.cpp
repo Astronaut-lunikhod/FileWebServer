@@ -217,7 +217,7 @@ void WebServer::EpollLoop() {
                 DealWrite(fd);
                 pthread_mutex_lock(&session_map_mutex_);
                 for (int jte: session_map_[connections_[fd].session_]) {  // 如果有类似于back的请求，那需要修改相关套接字的pwd_状态。
-                    if (jte != fd)  // 同一个内容就别操作了，会有溢出的问题。
+                    if (jte != fd && 0 <= jte && jte <= Config::get_singleton_()->web_server_connection_max_num_)  // 同一个内容就别操作了，会有溢出的问题。
                         connections_[jte] = connections_[fd];
                 }
                 pthread_mutex_unlock(&session_map_mutex_);
