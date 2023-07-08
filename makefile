@@ -39,5 +39,5 @@ FileWebServer: Config/Config.o HTTPConnection/HTTPConnection.o Log/Log.o MysqlCo
 .PHONY:clean
 clean:
 	rm Config/Config.o HTTPConnection/HTTPConnection.o Log/Log.o MysqlConnectionPool/MysqlConnectionPool.o Redis/Redis.o ThreadPool/ThreadPool.o timer/timer.o Utils/Utils.o WebServer/WebServer.o main.o FileWebServer
-	rm `find ./LogDir/*`
-	rm `find ./core*`
+	rm `find ./LogDir -mindepth 1 -type f -name "*serverLog*"`
+	rm `find ./ -mindepth 1 -name "core*"`
