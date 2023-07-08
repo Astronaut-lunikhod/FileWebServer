@@ -17,3 +17,5 @@
 7.压力测试的时候可以使用webbench，但是记得使用-2的选项，用于模拟HTTP/1.1。
 
 8.测试的时候使用的命令：./webbench -2 --get -c 10000 -t 5 http://localhost:7777/login.html 已经可以实现上万的并发连接，同时QPS可以达到4k。
+
+9.使用gdb 原始文件 core文件进行debug。bt可以查看出错的报错调用情况。类似于内存快照。
