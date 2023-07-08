@@ -112,13 +112,13 @@ void sort_timer_list::DelTimer(Timer *timer) {
         tail = nullptr;
         return;
     }
-    if (timer == head) {
+    if (timer->pre == nullptr) {
         head = head->next;
         head->pre = nullptr;
         delete timer;
         return;
     }
-    if (timer == tail) {
+    if (timer->next == nullptr) {
         tail = tail->pre;
         tail->next = nullptr;
         delete timer;
